@@ -675,11 +675,11 @@ class App(ctk.CTk):
             is_dark = ctk.get_appearance_mode() == "Dark"
             bg_file = os.path.join("icons", "bg1dark.jpg") if is_dark else os.path.join("icons", "bg1light.jpg")
             
-            # Check if the theme-specific image exists, fallback to bg1.jpg
+            # Check if the theme-specific image exists, fallback to bg1dark.jpg
             if not os.path.exists(bg_file):
-                bg_file = os.path.join("icons", "bg1.jpg")
+                bg_file = os.path.join("icons", "bg1dark.jpg")
                 if not os.path.exists(bg_file):
-                    print(f"Warning: No background image found (tried icons/bg1dark.jpg, icons/bg1light.jpg, icons/bg1.jpg)")
+                    print(f"Warning: No background image found (tried icons/bg1dark.jpg, icons/bg1light.jpg)")
                     return
             
             bg_image = Image.open(bg_file)
