@@ -741,11 +741,25 @@ class App(ctk.CTk):
 
     def listen_click(self):
         """Handler for listen button"""
-        print("Listen clicked")
+        script_path = "listen.py"
+        if os.path.exists(script_path):
+            try:
+                subprocess.Popen([sys.executable, script_path])
+            except Exception as e:
+                print(f"Error running listen.py: {e}")
+        else:
+            print(f"Warning: {script_path} not found in the current directory")
 
     def mapping_click(self):
         """Handler for mapping button"""
-        print("Mapping clicked")
+        script_path = "mapping.py"
+        if os.path.exists(script_path):
+            try:
+                subprocess.Popen([sys.executable, script_path])
+            except Exception as e:
+                print(f"Error running mapping.py: {e}")
+        else:
+            print(f"Warning: {script_path} not found in the current directory")
 
     def open_config_directory(self):
         """Opens the directory containing the config file"""
