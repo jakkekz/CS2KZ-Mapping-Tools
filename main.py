@@ -1,775 +1,1255 @@
-import tkinter as tk
-import customtkinter as ctk
-from tkinter import filedialog
+"""
+PyImGui version of CS2KZ Mapping Tools
+Full-featured version with all capabilities from the original
+"""
+
+import imgui
+import glfw
+from imgui.integrations.glfw import GlfwRenderer
+import OpenGL.GL as gl
+from PIL import Image
 import os
 import sys
-import json
 import subprocess
-from settings_manager import SettingsManager
+import psutil
+from scripts.settings_manager import SettingsManager
 
-# Initial CustomTkinter setup
-ctk.set_default_color_theme("blue")
+# Window configuration
+WINDOW_WIDTH = 259  # Fixed width for 2 columns: 14 + 112 + 7 + 112 + 14 = 259
+WINDOW_WIDTH_COMPACT = 240  # Width for single column: increased for checkmark space
+CUSTOM_TITLE_BAR_HEIGHT = 30  # Custom title bar height
+MENU_BAR_HEIGHT = 0
+TOP_PADDING = 0  # Padding above buttons - customize this value
+BUTTON_SIZE = 112
+BUTTON_SIZE_COMPACT_WIDTH = 212  # Wider button for compact mode (240 - 14 - 14 = 212)
+BUTTON_SIZE_COMPACT_HEIGHT = 40  # Shorter button for compact mode
+BUTTON_SPACING = 7
+ROW_HEIGHT = BUTTON_SIZE + BUTTON_SPACING  # Space for button + spacing between rows
+ROW_HEIGHT_COMPACT = BUTTON_SIZE_COMPACT_HEIGHT + BUTTON_SPACING  # Space for compact buttons
+BOTTOM_PADDING = 55  # Padding below buttons - customize this value
+WINDOW_TITLE = "CS2KZ Mapping Tools"
 
-class RoundedButton(ctk.CTkButton):
-    def __init__(self, parent, text, command, image_path=None, settings_command=None, grid_column=0, button_name=None, app=None, **kwargs):
-        # Create a frame to hold the button with padding
-        self.frame = ctk.CTkFrame(parent, width=126, height=126, fg_color="transparent")  # 180 * 0.7 = 126
-        self.frame.pack_propagate(False)
-        self.frame.grid_propagate(False)
-        
-        # Store button name and app reference for drag-and-drop
-        self.button_name = button_name
-        self.app = app
-        self.is_dragging = False
-        self.drag_start_x = 0
-        self.drag_start_y = 0
-        
-        # Initialize the button first
-        super().__init__(
-            self.frame,
-            text=text,
-            command=command,  # Use original command directly
-            width=112,  # 160 * 0.7 = 112
-            height=112,  # 160 * 0.7 = 112
-            corner_radius=7,  # 10 * 0.7 = 7
-            font=("Segoe UI", 9, "bold"),  # 13 * 0.7 ≈ 9
-            fg_color=("gray75", "gray25"),
-            hover_color=("gray70", "gray30"),
-            text_color=("gray10", "white"),
-            border_width=2,
-            border_color=("gray60", "gray40"),
-            **kwargs
-        )
-        
-        # Load and set image after button is initialized
-        if image_path and os.path.exists(image_path):
-            try:
-                from PIL import Image
-                pil_image = Image.open(image_path)
-                image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(56, 56))  # 80 * 0.7 = 56
-                self.configure(image=image, compound="top")
-            except Exception:
-                self.configure(compound="center")
-        else:
-            self.configure(compound="center")
-        
-        # Configure frame grid for centering
-        self.frame.grid_columnconfigure(0, weight=1)
-        self.frame.grid_rowconfigure(0, weight=1)
-        
-        # Place button in the frame with equal padding
-        self.grid_configure(row=0, column=0, padx=7, pady=7, sticky="nsew")  # Equal padding on all sides
 
-        # Create move handle at the top-left of the button (conditional on settings)
-        if app and button_name:
-            # Get the button background color
-            is_dark = ctk.get_appearance_mode() == "Dark"
-            button_bg = self._apply_appearance_mode(self.cget("fg_color"))
-            
-            # Create a label for the move icon
-            self.move_handle = tk.Label(
-                self,  # Parent is the main button
-                text="✥",  # Move/drag icon (circled plus/crosshair)
-                font=("Segoe UI", 14),  # 20 * 0.7 = 14
-                bg=button_bg,  # Match button background
-                fg="gray60" if is_dark else "gray40",
-                cursor="fleur",  # Move cursor (four arrows)
-                bd=0,  # No border
-                highlightthickness=0  # No highlight
-            )
-            
-            # Position move handle at the top-left corner of the button
-            self.move_handle.place(relx=0.05, rely=0.05, anchor="nw")
-            
-            # Check settings to show/hide move icon
-            show_move_icons = app.settings.get('show_move_icons', False)
-            if not show_move_icons:
-                self.move_handle.place_forget()
-            
-            # Bind hover effects
-            self.move_handle.bind("<Enter>", lambda e: self.move_handle.config(fg="white" if is_dark else "black"))
-            self.move_handle.bind("<Leave>", lambda e: self.move_handle.config(fg="gray60" if is_dark else "gray40"))
-            
-            # Bind drag events to the move handle ONLY
-            self.move_handle.bind("<Button-1>", self.on_drag_start)
-            self.move_handle.bind("<B1-Motion>", self.on_drag_motion)
-            self.move_handle.bind("<ButtonRelease-1>", self.on_drag_end)
-
-        # Create and configure settings button at the top-right of the button
-        if settings_command:
-            # Get the button background color
-            is_dark = ctk.get_appearance_mode() == "Dark"
-            button_bg = self._apply_appearance_mode(self.cget("fg_color"))
-            
-            # Create a transparent label for the cogwheel on the button itself
-            self.settings_button = tk.Label(
-                self,  # Parent is the main button
-                text="⚙",  # Gear emoji as settings icon
-                font=("Segoe UI", 10),  # 14 * 0.7 = 10
-                bg=button_bg,  # Match button background
-                fg="gray60" if is_dark else "gray40",
-                cursor="hand2",  # Hand cursor to indicate clickability
-                bd=0,  # No border
-                highlightthickness=0  # No highlight
-            )
-            
-            # Position settings button at the top-right corner of the button
-            self.settings_button.place(relx=0.95, rely=0.05, anchor="ne")
-            
-            # Bind click event and hover effects
-            self.settings_button.bind("<Button-1>", lambda e: settings_command())
-            self.settings_button.bind("<Enter>", lambda e: self.settings_button.config(fg="white" if is_dark else "black"))
-            self.settings_button.bind("<Leave>", lambda e: self.settings_button.config(fg="gray60" if is_dark else "gray40"))
-    
-    def on_drag_start(self, event):
-        """Start dragging the button from the move handle"""
-        self.is_dragging = True
-        self.drag_start_x = event.x
-        self.drag_start_y = event.y
-        # Store initial grid info before lifting
-        grid_info = self.frame.grid_info()
-        self.initial_row = grid_info.get('row')
-        self.initial_col = grid_info.get('column')
-        # Raise the frame to top layer
-        self.frame.lift()
-        # Change appearance to indicate dragging
-        self.configure(border_color="blue")
-    
-    def on_drag_motion(self, event):
-        """Handle drag motion"""
-        if self.is_dragging:
-            # Calculate new position relative to the move handle
-            x = self.frame.winfo_x() + event.x - self.drag_start_x
-            y = self.frame.winfo_y() + event.y - self.drag_start_y
-            # Move the frame
-            self.frame.place(x=x, y=y)
-    
-    def on_drag_end(self, event):
-        """End dragging and swap button positions"""
-        if self.is_dragging:
-            self.is_dragging = False
-            # Reset border color
-            is_dark = ctk.get_appearance_mode() == "Dark"
-            self.configure(border_color=("gray60", "gray40"))
-            
-            # IMPORTANT: Remove place geometry before restoring grid
-            self.frame.place_forget()
-            
-            # Find which button we're hovering over
-            x = self.frame.winfo_rootx() + event.x
-            y = self.frame.winfo_rooty() + event.y
-            
-            target_button = None
-            for btn in self.app.all_buttons:
-                if btn != self and btn.frame.winfo_ismapped():
-                    btn_x = btn.frame.winfo_rootx()
-                    btn_y = btn.frame.winfo_rooty()
-                    btn_width = btn.frame.winfo_width()
-                    btn_height = btn.frame.winfo_height()
-                    
-                    if (btn_x <= x <= btn_x + btn_width and 
-                        btn_y <= y <= btn_y + btn_height):
-                        target_button = btn
-                        break
-            
-            # Swap positions if we found a target
-            if target_button:
-                self.app.swap_buttons(self.button_name, target_button.button_name)
-            else:
-                # Reset to grid position
-                self.app.update_button_grid()
+class ImGuiApp:
+    def __init__(self):
+        self.window = None
+        self.impl = None
         
-    def grid(self, *args, **kwargs):
-        self.frame.grid(*args, **kwargs)
+        # Initialize settings manager
+        self.settings = SettingsManager()
         
-    def grid_remove(self):
-        self.frame.grid_remove()
-
-class App(ctk.CTk):
-    def toggle_theme(self):
-        # Toggle between light and dark
-        current_mode = ctk.get_appearance_mode()
-        new_mode = "Light" if current_mode == "Dark" else "Dark"
-        ctk.set_appearance_mode(new_mode)
-        self.settings.set('appearance_mode', new_mode.lower())
-        
-        # Update background image to match new theme
-        if hasattr(self, 'bg_canvas'):
-            self.update_background_image()
-    
-    def toggle_move_icons(self):
-        """Toggle visibility of move icons on all buttons"""
-        current_state = self.settings.get('show_move_icons', False)
-        new_state = not current_state
-        self.settings.set('show_move_icons', new_state)
-        
-        # Update all button move handles
-        for btn in self.all_buttons:
-            if hasattr(btn, 'move_handle'):
-                if new_state:
-                    btn.move_handle.place(relx=0.05, rely=0.05, anchor="nw")
-                else:
-                    btn.move_handle.place_forget()
-    
-    def toggle_auto_update_source2viewer(self):
-        """Toggle auto-update for Source2Viewer"""
-        current_state = self.settings.get('auto_update_source2viewer', True)
-        new_state = not current_state
-        self.settings.set('auto_update_source2viewer', new_state)
-        
-    def setup_window(self):
-        # Configure window appearance
-        self.title("CS2KZ Mapping Tools")
-        self.geometry("340x400")  # Initial size
-        self.resizable(False, False)
-        
-        # Set theme from settings
-        appearance_mode = self.settings.get('appearance_mode', 'system')
-        ctk.set_appearance_mode(appearance_mode)
-    def toggle_button_no_close(self, button_name):
-        """Toggle button visibility without closing the menu"""
-        button = getattr(self, f"{button_name}_btn")
-        var = self.button_vars[button_name]
-        is_visible = var.get()
-        
-        # Update settings
-        self.settings.set_button_visibility(button_name, is_visible)
-        
-        # Schedule the grid update for after the menu click
-        self.after(1, lambda: self.update_grid_for_button(button_name, is_visible))
-        
-        # Keep the menu open by posting it again
-        self.after(1, lambda: self.post_menu())
-    
-    def post_menu(self):
-        """Re-post the view menu to keep it open"""
-        menu_x = self.view_menu.winfo_rootx()
-        menu_y = self.view_menu.winfo_rooty()
-        if menu_x and menu_y:  # Only repost if we had a previous position
-            self.view_menu.post(menu_x, menu_y)
-    
-    def update_grid_for_button(self, button_name, is_visible):
-        """Update the grid for a specific button"""
-        button = getattr(self, f"{button_name}_btn")
-        if is_visible:
-            self.update_button_grid()
-        else:
-            button.grid_remove()
-            self.update_button_grid()
-
-    def toggle_button_visibility(self, button_name):
-        """Original toggle method for non-menu toggles"""
-        button = getattr(self, f"{button_name}_btn")
-        var = self.button_vars[button_name]
-        is_visible = var.get()
-        
-        # Update settings
-        self.settings.set_button_visibility(button_name, is_visible)
-        
-        # Update grid
-        if is_visible:
-            self.update_button_grid()
-        else:
-            button.grid_remove()
-            self.update_button_grid()
-
-    def swap_buttons(self, button1_name, button2_name):
-        """Swap the order of two buttons"""
-        button_order = self.settings.get_button_order()
-        
-        # Find indices of both buttons
-        try:
-            idx1 = button_order.index(button1_name)
-            idx2 = button_order.index(button2_name)
-            
-            # Swap them
-            button_order[idx1], button_order[idx2] = button_order[idx2], button_order[idx1]
-            
-            # Save new order
-            self.settings.set_button_order(button_order)
-            
-            # Update the grid
-            self.update_button_grid()
-        except ValueError:
-            # One of the buttons wasn't found in the order list
-            print(f"Error: Could not find buttons {button1_name} or {button2_name} in order list")
-
-    def update_button_grid(self, event=None):
-        # Get button order from settings
-        button_order = self.settings.get_button_order()
-        visible_buttons_dict = self.settings.get_visible_buttons()
-        
-        # Create ordered list of visible buttons
-        visible_buttons = []
-        for name in button_order:
-            if visible_buttons_dict.get(name, False):
-                btn = getattr(self, f"{name}_btn", None)
-                if btn:
-                    visible_buttons.append(btn)
-        
-        # Calculate window size FIRST with fixed row heights
-        num_rows = (len(visible_buttons) + 1) // 2 if len(visible_buttons) > 0 else 1
-        window_width = 308  # 440 * 0.7 = 308
-        
-        # Fixed heights for each row configuration (menu bar + content + consistent padding)
-        # Breakdown:
-        # - Menu bar: 42px
-        # - Top padding from main_frame: 14px
-        # - Each button row: 126px (button frame) + 7px (top grid padding) + 7px (bottom grid padding) = 140px
-        # - Bottom padding: 7px (to match top padding, since grid already adds 7px below last row)
-        menu_bar_height = 42  # Menu bar height
-        top_padding = 14  # Top padding from main_frame
-        row_height = 140  # Height per row (126 frame + 7 top + 7 bottom padding)
-        bottom_padding = 0  # :3
-        
-        window_height = menu_bar_height + top_padding + (num_rows * row_height) + bottom_padding
-        
-        # Get current position AFTER calculating size
-        current_x = self.winfo_x()
-        current_y = self.winfo_y()
-        
-        # Set geometry BEFORE modifying grid to prevent auto-resizing
-        if not hasattr(self, 'initial_position_set'):
-            # Get saved position from settings
-            saved_pos = self.settings.get_window_position()
-            if saved_pos:
-                x, y = saved_pos
-            else:
-                # Center window if no saved position
-                screen_width = self.winfo_screenwidth()
-                screen_height = self.winfo_screenheight()
-                x = (screen_width - window_width) // 2
-                y = (screen_height - window_height) // 2
-            
-            self.geometry(f"{window_width}x{window_height}+{x}+{y}")
-            self.minsize(window_width, window_height)
-            self.maxsize(window_width, window_height)
-            self.initial_position_set = True
-        else:
-            # Set geometry BEFORE grid operations to lock the size
-            self.geometry(f"{window_width}x{window_height}+{current_x}+{current_y}")
-            self.minsize(window_width, window_height)
-            self.maxsize(window_width, window_height)
-            self.settings.set_window_position(current_x, current_y)
-        
-        # Force geometry update to apply immediately
-        self.update_idletasks()
-        
-        # NOW modify the grid
-        # CRITICAL: Remove all buttons from both grid AND place geometry
-        for btn in self.all_buttons:
-            btn.frame.place_forget()  # Clear any place geometry first
-            btn.grid_remove()  # Then remove from grid
-        
-        # Redistribute visible buttons in a 2-column grid
-        for i, btn in enumerate(visible_buttons):
-            row = i // 2
-            col = i % 2
-            btn.grid(row=row, column=col, padx=(7, 7), pady=(7, 7), sticky="nsew")  # 10 * 0.7 = 7
-        
-        # Update background only if window height actually changed
-        if not hasattr(self, '_last_window_height') or self._last_window_height != window_height:
-            self.after(100, self.update_background_image)
-            self._last_window_height = window_height
-
-    def configure_menu_colors(self, menu_widget):
-        # Get colors from CustomTkinter theme
-        is_dark = ctk.get_appearance_mode() == "Dark"
-        
-        # Use semi-dark colors to blend with background
-        bg_color = "#2a2a2a" if is_dark else "#e0e0e0"
-        fg_color = "white" if is_dark else "black"
-        active_bg = "#3a3a3a" if is_dark else "#d0d0d0"
-        
-        menu_widget.configure(
-            bg=bg_color,
-            fg=fg_color,
-            activebackground=active_bg,
-            activeforeground=fg_color,
-            selectcolor=fg_color,
-            borderwidth=0,
-            relief="flat"
-        )
-        
-        # Apply to submenus
-        for item in menu_widget.winfo_children():
-            if isinstance(item, tk.Menu):
-                self.configure_menu_colors(item)
-
-    def open_github(self):
-        """Open the GitHub project page"""
-        import webbrowser
-        import threading
-        # Use threading to avoid GIL issues with webbrowser
-        threading.Thread(target=lambda: webbrowser.open("https://github.com/jakkekz/.jakke"), daemon=True).start()
-
-    def open_theme_config(self):
-        """Open theme configuration in temp directory"""
-        import os
-        import webbrowser
-        temp_dir = os.path.join(os.environ.get('TEMP', '/temp'))
-        config_path = os.path.join(temp_dir, 'theme_config.json')
-        
-        # Create config file if it doesn't exist
-        if not os.path.exists(config_path):
-            import json
-            default_config = {
-                'theme': ctk.get_appearance_mode().lower(),
-                'color_theme': 'blue'
-            }
-            with open(config_path, 'w') as f:
-                json.dump(default_config, f, indent=4)
-        
-        # Open the file
-        os.startfile(config_path)
-
-    def create_menu(self):
-        # Get colors from CustomTkinter theme
-        is_dark = ctk.get_appearance_mode() == "Dark"
-        
-        # Use semi-dark colors to blend with background
-        bg_color = "#2a2a2a" if is_dark else "#e0e0e0"
-        fg_color = "white" if is_dark else "black"
-        active_bg = "#3a3a3a" if is_dark else "#d0d0d0"
-        
-        # Create menu with transparent-like colors
-        self.menubar = tk.Menu(self,
-            bg=bg_color,
-            fg=fg_color,
-            activebackground=active_bg,
-            activeforeground=fg_color,
-            selectcolor=fg_color,
-            borderwidth=0,
-            relief="flat"
-        )
-        self.config(menu=self.menubar)
-
-        # Create View menu for button visibility
-        self.view_menu = tk.Menu(self.menubar, tearoff=0)  # Disable tearoff
-        self.configure_menu_colors(self.view_menu)
-        self.menubar.add_cascade(label="View", menu=self.view_menu)
-        
-        # Add checkbuttons for each button's visibility
-        button_labels = {
-            "dedicated_server": "Dedicated Server",
-            "insecure": "Insecure",
-            "listen": "Listen",
-            "mapping": "Mapping",
-            "source2viewer": "Source2 Viewer"
+        # Button visibility states from settings
+        saved_visibility = self.settings.get_visible_buttons()
+        self.button_visibility = {
+            "dedicated_server": saved_visibility.get("dedicated_server", True),
+            "insecure": saved_visibility.get("insecure", True),
+            "listen": saved_visibility.get("listen", True),
+            "mapping": saved_visibility.get("mapping", True),
+            "source2viewer": saved_visibility.get("source2viewer", True),
+            "cs2importer": saved_visibility.get("cs2importer", True),
+            "skyboxconverter": saved_visibility.get("skyboxconverter", True),
+            "vtf2png": saved_visibility.get("vtf2png", True),
+            "loading_screen": saved_visibility.get("loading_screen", True),
+            "point_worldtext": saved_visibility.get("point_worldtext", True)
         }
         
-        # Initialize button variables from settings
-        self.button_vars = {}
-        saved_visibility = self.settings.get_visible_buttons()
+        # Button order from settings
+        self.button_order = self.settings.get_button_order()
         
-        for button_name, label in button_labels.items():
-            self.button_vars[button_name] = tk.BooleanVar(value=saved_visibility.get(button_name, True))
-            # Modify the command to prevent menu from closing
-            self.view_menu.add_checkbutton(
-                label=label,
-                variable=self.button_vars[button_name],
-                command=lambda name=button_name: self.toggle_button_no_close(name)
-            )
-
-        # Create Settings menu
-        self.settings_menu = tk.Menu(self.menubar, tearoff=0)
-        self.configure_menu_colors(self.settings_menu)
-        self.menubar.add_cascade(label="Settings", menu=self.settings_menu)
+        # Settings from settings manager
+        self.show_move_icons = self.settings.get('show_move_icons', False)
+        self.auto_update_source2viewer = self.settings.get('auto_update_source2viewer', True)
+        self.auto_update_metamod = self.settings.get('auto_update_metamod', True)
+        self.auto_update_cs2kz = self.settings.get('auto_update_cs2kz', True)
+        self.compact_mode = self.settings.get('compact_mode', False)
+        appearance = self.settings.get('appearance_mode', 'dark')
+        self.dark_mode = appearance == 'dark' or appearance == 'system'
         
-        # Add toggle theme to settings
-        self.settings_menu.add_command(label="Toggle Theme", command=self.toggle_theme)
-        self.settings_menu.add_separator()
+        # Window opacity
+        self.window_opacity = self.settings.get('window_opacity', 1.0)
         
-        # Add move icons toggle
-        self.show_move_icons_var = tk.BooleanVar(value=self.settings.get('show_move_icons', False))
-        self.settings_menu.add_checkbutton(
-            label="Show Move Icons",
-            variable=self.show_move_icons_var,
-            command=self.toggle_move_icons
+        # Always on top
+        self.always_on_top = self.settings.get('always_on_top', False)
+        
+        # Button icons (texture IDs will be loaded here)
+        self.button_icons = {}
+        
+        # Long-press drag and drop state
+        self.dragging_button = None
+        self.hover_target = None
+        self.button_press_start_time = {}  # Track when each button was pressed
+        self.button_press_start_pos = {}   # Track mouse position when pressed
+        self.button_positions = {}         # Store button screen positions
+        self.drag_threshold_time = 0.3     # Seconds to hold before drag starts
+        self.drag_threshold_distance = 5   # Pixels to move before drag starts
+        self.dragged_button_icon = None    # Store icon/label for dragged button
+        self.dragged_button_label = None
+        
+        # Custom title bar drag state
+        self.dragging_window = False
+        self.drag_offset_x = 0
+        self.drag_offset_y = 0
+        
+        # Window position
+        self.window_pos = None
+        
+        # Current window height based on visible buttons
+        self.current_window_height = self.calculate_window_height()
+        
+        # CS2 detection state
+        self.cs2_running = False
+        
+        # Cursor state
+        self.current_cursor = None
+        self.should_show_hand = False
+    
+    def set_cursor(self, cursor_type):
+        """Set the cursor if it's different from current"""
+        if self.current_cursor != cursor_type:
+            if cursor_type == "hand":
+                glfw.set_cursor(self.window, self.hand_cursor)
+            else:
+                glfw.set_cursor(self.window, self.arrow_cursor)
+            self.current_cursor = cursor_type
+    
+    def is_cs2_running(self):
+        """Check if CS2 (or fake_cs2.py for testing) is running"""
+        try:
+            # Much faster: iterate through all processes only once with minimal attributes
+            for proc in psutil.process_iter(['name']):
+                try:
+                    name = proc.info['name']
+                    if name:
+                        name_lower = name.lower()
+                        # Check for real cs2.exe
+                        if name_lower == 'cs2.exe':
+                            return True
+                        # Check for python processes (for fake_cs2.py testing)
+                        if 'python' in name_lower:
+                            # Only check cmdline for python processes
+                            cmdline = proc.cmdline()
+                            if cmdline and any('fake_cs2.py' in arg.lower() for arg in cmdline):
+                                return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception:
+            pass
+        return False
+    
+    def calculate_window_height(self):
+        """Calculate window height based on number of visible buttons"""
+        visible_count = sum(1 for v in self.button_visibility.values() if v)
+        if self.compact_mode:
+            # Single column, one button per row
+            num_rows = visible_count if visible_count > 0 else 1
+            return CUSTOM_TITLE_BAR_HEIGHT + MENU_BAR_HEIGHT + TOP_PADDING + (num_rows * ROW_HEIGHT_COMPACT) + BOTTOM_PADDING
+        else:
+            # 2 columns
+            num_rows = (visible_count + 1) // 2 if visible_count > 0 else 1
+            return CUSTOM_TITLE_BAR_HEIGHT + MENU_BAR_HEIGHT + TOP_PADDING + (num_rows * ROW_HEIGHT) + BOTTOM_PADDING
+    
+    def get_window_width(self):
+        """Get window width based on compact mode"""
+        return WINDOW_WIDTH_COMPACT if self.compact_mode else WINDOW_WIDTH
+    
+    def swap_buttons(self, button1, button2):
+        """Swap positions of two buttons in the order"""
+        if button1 in self.button_order and button2 in self.button_order:
+            idx1 = self.button_order.index(button1)
+            idx2 = self.button_order.index(button2)
+            self.button_order[idx1], self.button_order[idx2] = self.button_order[idx2], self.button_order[idx1]
+            self.settings.set_button_order(self.button_order)
+    
+    def init_window(self):
+        """Initialize GLFW window and ImGui"""
+        if not glfw.init():
+            print("Could not initialize GLFW")
+            sys.exit(1)
+        
+        # Window hints
+        glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
+        glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
+        glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, gl.GL_TRUE)
+        glfw.window_hint(glfw.DECORATED, glfw.FALSE)  # Remove window decorations for custom title bar
+        glfw.window_hint(glfw.VISIBLE, glfw.FALSE)  # Start hidden to prevent black flash
+        
+        # Create custom cursors
+        self.arrow_cursor = None
+        self.hand_cursor = None
+        self.move_cursor = None
+        
+        # Create window with calculated height
+        window_width = self.get_window_width()
+        self.window = glfw.create_window(window_width, self.current_window_height, WINDOW_TITLE, None, None)
+        if not self.window:
+            glfw.terminate()
+            print("Could not create GLFW window")
+            sys.exit(1)
+        
+        # Make window non-resizable
+        glfw.set_window_attrib(self.window, glfw.RESIZABLE, glfw.FALSE)
+        
+        # Set always on top if enabled
+        if self.always_on_top:
+            glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE)
+        
+        # Set window position from settings
+        saved_pos = self.settings.get_window_position()
+        if saved_pos:
+            # Check if the saved position is on-screen
+            # Get primary monitor to check bounds
+            primary_monitor = glfw.get_primary_monitor()
+            video_mode = glfw.get_video_mode(primary_monitor)
+            screen_width = video_mode.size.width
+            screen_height = video_mode.size.height
+            
+            # Only use saved position if it's at least partially on screen
+            if (saved_pos[0] < screen_width - 50 and saved_pos[1] < screen_height - 50 and
+                saved_pos[0] > -window_width + 50 and saved_pos[1] > -50):
+                glfw.set_window_pos(self.window, saved_pos[0], saved_pos[1])
+            else:
+                # Center window if saved position is off-screen
+                center_x = (screen_width - window_width) // 2
+                center_y = (screen_height - self.current_window_height) // 2
+                glfw.set_window_pos(self.window, center_x, center_y)
+        else:
+            # Center window on first launch
+            primary_monitor = glfw.get_primary_monitor()
+            video_mode = glfw.get_video_mode(primary_monitor)
+            screen_width = video_mode.size.width
+            screen_height = video_mode.size.height
+            center_x = (screen_width - window_width) // 2
+            center_y = (screen_height - self.current_window_height) // 2
+            glfw.set_window_pos(self.window, center_x, center_y)
+        
+        glfw.make_context_current(self.window)
+        glfw.swap_interval(1)  # Enable vsync
+        
+        # Set window opacity
+        glfw.set_window_opacity(self.window, self.window_opacity)
+        
+        # Set window icon (using pyGLFW's internal structure)
+        icon_path = os.path.join("icons", "hammerkz.ico")
+        if os.path.exists(icon_path):
+            try:
+                import ctypes
+                icon_img = Image.open(icon_path)
+                icon_img = icon_img.convert("RGBA")
+                width, height = icon_img.size
+                pixels = icon_img.tobytes()
+                
+                # Create a simple object to hold the image data
+                class GLFWimage(ctypes.Structure):
+                    _fields_ = [
+                        ('width', ctypes.c_int),
+                        ('height', ctypes.c_int),
+                        ('pixels', ctypes.POINTER(ctypes.c_ubyte))
+                    ]
+                
+                # Convert pixels to ctypes array
+                pixel_data = (ctypes.c_ubyte * len(pixels)).from_buffer_bytearray(bytearray(pixels))
+                
+                image = GLFWimage()
+                image.width = width
+                image.height = height
+                image.pixels = ctypes.cast(pixel_data, ctypes.POINTER(ctypes.c_ubyte))
+                
+                glfw.set_window_icon(self.window, 1, [image])
+            except Exception as e:
+                # Silently fail - icon is nice to have but not critical
+                pass
+        
+        # Setup ImGui
+        imgui.create_context()
+        self.impl = GlfwRenderer(self.window)
+        
+        # Create custom cursors
+        self.arrow_cursor = glfw.create_standard_cursor(glfw.ARROW_CURSOR)
+        self.hand_cursor = glfw.create_standard_cursor(glfw.HAND_CURSOR)
+        
+        # Setup ImGui style
+        self.setup_style()
+        
+        # Load button icons
+        self.load_icons()
+    
+    def setup_style(self):
+        """Configure ImGui visual style"""
+        style = imgui.get_style()
+        io = imgui.get_io()
+        
+        # Enable font with better rendering
+        io.font_global_scale = 1.0
+        
+        if self.dark_mode:
+            imgui.style_colors_dark()
+            # Match CustomTkinter dark theme
+            style.colors[imgui.COLOR_WINDOW_BACKGROUND] = (0.1, 0.1, 0.1, 1.0)
+            style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = (0.16, 0.16, 0.16, 1.0)
+            style.colors[imgui.COLOR_BUTTON] = (0.29, 0.29, 0.29, 1.0)  # gray25
+            style.colors[imgui.COLOR_BUTTON_HOVERED] = (0.35, 0.35, 0.35, 1.0)  # gray30
+            style.colors[imgui.COLOR_BUTTON_ACTIVE] = (0.40, 0.40, 0.40, 1.0)
+            style.colors[imgui.COLOR_BORDER] = (0.40, 0.40, 0.40, 1.0)  # gray40
+            style.colors[imgui.COLOR_TEXT] = (1.0, 1.0, 1.0, 1.0)
+            # Menu items hover (match button hover)
+            style.colors[imgui.COLOR_HEADER_HOVERED] = (0.35, 0.35, 0.35, 1.0)  # Same as button hover
+            style.colors[imgui.COLOR_HEADER_ACTIVE] = (0.40, 0.40, 0.40, 1.0)
+        else:
+            imgui.style_colors_light()
+            # Match CustomTkinter light theme
+            style.colors[imgui.COLOR_WINDOW_BACKGROUND] = (0.94, 0.94, 0.94, 1.0)
+            style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = (0.88, 0.88, 0.88, 1.0)
+            style.colors[imgui.COLOR_BUTTON] = (0.75, 0.75, 0.75, 1.0)  # gray75
+            style.colors[imgui.COLOR_BUTTON_HOVERED] = (0.70, 0.70, 0.70, 1.0)  # gray70
+            style.colors[imgui.COLOR_BUTTON_ACTIVE] = (0.65, 0.65, 0.65, 1.0)
+            style.colors[imgui.COLOR_BORDER] = (0.60, 0.60, 0.60, 1.0)  # gray60
+            style.colors[imgui.COLOR_TEXT] = (0.1, 0.1, 0.1, 1.0)
+            # Menu items hover (match button hover)
+            style.colors[imgui.COLOR_HEADER_HOVERED] = (0.70, 0.70, 0.70, 1.0)  # Same as button hover
+            style.colors[imgui.COLOR_HEADER_ACTIVE] = (0.65, 0.65, 0.65, 1.0)
+        
+        # Rounded corners (match CustomTkinter)
+        style.window_rounding = 0.0  # Window itself not rounded
+        style.frame_rounding = 7.0   # Match button corner_radius
+        style.grab_rounding = 7.0
+        
+        # Padding and spacing (match CustomTkinter values)
+        style.window_padding = (14, 14)
+        style.frame_padding = (10, 10)
+        style.item_spacing = (7, 7)  # Match grid padding
+        style.window_border_size = 0.0
+        style.frame_border_size = 2.0  # Match button border_width
+        
+        # Extra right padding for menus to prevent checkmark cutoff
+        style.item_inner_spacing = (10, 4)
+    
+    def load_icons(self):
+        """Load button icons as OpenGL textures"""
+        icons = {
+            "dedicated_server": "icondedicated.ico",
+            "insecure": "iconinsecure.ico",
+            "listen": "iconlisten.ico",
+            "mapping": "hammerkz.ico",
+            "source2viewer": "source2viewer.ico",
+            "cs2importer": "porting.ico",
+            "skyboxconverter": "skybox.ico",
+            "vtf2png": "vtf2png.ico",
+            "loading_screen": "loading.ico",
+            "point_worldtext": "questionmark.ico",
+            "title_icon": "hammerkz.ico"  # Icon for title bar
+        }
+        
+        for name, filename in icons.items():
+            path = os.path.join("icons", filename)
+            if os.path.exists(path):
+                try:
+                    img = Image.open(path)
+                    # Ensure RGBA mode
+                    if img.mode != "RGBA":
+                        img = img.convert("RGBA")
+                    # Use smaller size for title icon
+                    if name == "title_icon":
+                        img = img.resize((16, 16), Image.Resampling.LANCZOS)
+                    else:
+                        img = img.resize((56, 56), Image.Resampling.LANCZOS)
+                    width, height = img.size
+                    img_data = img.tobytes()
+                    
+                    # Create OpenGL texture
+                    texture = gl.glGenTextures(1)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+                    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height,
+                                   0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, img_data)
+                    
+                    self.button_icons[name] = texture
+                    print(f"✓ Loaded icon: {name} ({filename})")
+                except Exception as e:
+                    print(f"✗ Error loading icon {filename} for {name}: {e}")
+    
+    def render_button(self, name, label, icon_key=None):
+        """Render a single button with optional icon and long-press drag support"""
+        if not self.button_visibility.get(name, True):
+            return False
+        
+        # Check if this button should be disabled due to CS2 running
+        cs2_conflict_buttons = ["dedicated_server", "insecure", "listen", "mapping"]
+        is_disabled = self.cs2_running and name in cs2_conflict_buttons
+        
+        clicked = False
+        imgui.push_id(name)
+        
+        # Button size depends on compact mode
+        if self.compact_mode:
+            button_width = BUTTON_SIZE_COMPACT_WIDTH
+            button_height = BUTTON_SIZE_COMPACT_HEIGHT
+            icon_size = 24
+        else:
+            button_width = BUTTON_SIZE
+            button_height = BUTTON_SIZE
+            icon_size = 56
+        
+        # If disabled, push grayed-out style
+        if is_disabled:
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.2, 0.2, 1.0)
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.2, 0.2, 0.2, 1.0)
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.2, 0.2, 0.2, 1.0)
+        
+        # Button with fixed size (matching CustomTkinter)
+        button_pressed = imgui.button(f"##{name}", width=button_width, height=button_height)
+        is_hovered = imgui.is_item_hovered()
+        
+        # Pop disabled style if applied
+        if is_disabled:
+            imgui.pop_style_color(3)
+        
+        # Set cursor to hand when hovering over clickable buttons
+        if is_hovered and not is_disabled:
+            self.should_show_hand = True
+        
+        # Get button position for icon/text overlay
+        button_min = imgui.get_item_rect_min()
+        button_max = imgui.get_item_rect_max()
+        draw_list = imgui.get_window_draw_list()
+        
+        # Store button position for drag detection
+        self.button_positions[name] = (button_min.x, button_min.y, button_max.x, button_max.y)
+        
+        # Don't render the button being dragged in its original position
+        should_render = self.dragging_button != name
+        
+        if should_render:
+            if self.compact_mode:
+                # Compact mode: icon on left, text on right
+                if icon_key and icon_key in self.button_icons:
+                    texture = self.button_icons[icon_key]
+                    icon_x = button_min.x + 8
+                    icon_y = button_min.y + (button_height - icon_size) // 2
+                    
+                    # Draw icon with reduced alpha if disabled
+                    if is_disabled:
+                        draw_list.add_image(
+                            texture,
+                            (icon_x, icon_y),
+                            (icon_x + icon_size, icon_y + icon_size),
+                            col=imgui.get_color_u32_rgba(0.5, 0.5, 0.5, 0.4)
+                        )
+                    else:
+                        draw_list.add_image(
+                            texture,
+                            (icon_x, icon_y),
+                            (icon_x + icon_size, icon_y + icon_size)
+                        )
+                    
+                    # Draw text next to icon
+                    text_x = icon_x + icon_size + 8
+                    text_y = button_min.y + (button_height - 12) // 2
+                else:
+                    # No icon, just center text
+                    text_x = button_min.x + 8
+                    text_y = button_min.y + (button_height - 12) // 2
+                
+                # Draw button label (left-aligned or after icon) - grayed out if disabled
+                if is_disabled:
+                    text_color = imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
+                else:
+                    text_color = imgui.get_color_u32_rgba(1, 1, 1, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.1, 0.1, 0.1, 1)
+                
+                # For compact mode, use single line (replace \n with space)
+                single_line_label = label.replace('\n', ' ')
+                draw_list.add_text(text_x, text_y, text_color, single_line_label)
+            else:
+                # Normal mode: icon on top, text below
+                # Draw icon if available
+                if icon_key and icon_key in self.button_icons:
+                    texture = self.button_icons[icon_key]
+                    icon_x = button_min.x + (button_width - icon_size) // 2
+                    icon_y = button_min.y + 15
+                    
+                    # Draw icon with reduced alpha if disabled
+                    if is_disabled:
+                        draw_list.add_image(
+                            texture,
+                            (icon_x, icon_y),
+                            (icon_x + icon_size, icon_y + icon_size),
+                            col=imgui.get_color_u32_rgba(0.5, 0.5, 0.5, 0.4)
+                        )
+                    else:
+                        draw_list.add_image(
+                            texture,
+                            (icon_x, icon_y),
+                            (icon_x + icon_size, icon_y + icon_size)
+                        )
+                    
+                    # Draw text below icon
+                    text_y = icon_y + icon_size + 8
+                else:
+                    # No icon, center text vertically
+                    text_y = button_min.y + 45
+                
+                # Draw button label (centered) - grayed out if disabled
+                if is_disabled:
+                    text_color = imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
+                else:
+                    text_color = imgui.get_color_u32_rgba(1, 1, 1, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.1, 0.1, 0.1, 1)
+                
+                # Split label by newlines for multi-line text
+                lines = label.split('\n')
+                for i, line in enumerate(lines):
+                    text_width = imgui.calc_text_size(line).x
+                    text_x = button_min.x + (button_width - text_width) // 2
+                    draw_list.add_text(text_x, text_y + i * 12, text_color, line)
+        
+        # Long-press drag logic (allow even if disabled)
+        import time
+        current_time = time.time()
+        mouse_pos = imgui.get_mouse_pos()
+        
+        # When mouse is pressed down on this button
+        if is_hovered and imgui.is_mouse_down(0):
+            # Start tracking if not already tracking
+            if name not in self.button_press_start_time:
+                self.button_press_start_time[name] = current_time
+                self.button_press_start_pos[name] = mouse_pos
+            
+            # Check if we should start dragging
+            press_duration = current_time - self.button_press_start_time[name]
+            start_pos = self.button_press_start_pos[name]
+            distance_moved = ((mouse_pos.x - start_pos.x)**2 + (mouse_pos.y - start_pos.y)**2)**0.5
+            
+            # Start drag if held long enough OR moved far enough
+            if (press_duration >= self.drag_threshold_time or distance_moved >= self.drag_threshold_distance):
+                if self.dragging_button is None:
+                    self.dragging_button = name
+                    self.dragged_button_icon = icon_key
+                    self.dragged_button_label = label
+                    self.should_show_hand = True
+        
+        # When mouse is released on this button
+        if name in self.button_press_start_time and not imgui.is_mouse_down(0):
+            # Only trigger click if we're not dragging and it was a quick press (and not disabled)
+            press_duration = current_time - self.button_press_start_time[name]
+            start_pos = self.button_press_start_pos[name]
+            distance_moved = ((mouse_pos.x - start_pos.x)**2 + (mouse_pos.y - start_pos.y)**2)**0.5
+            
+            if (self.dragging_button is None and 
+                press_duration < self.drag_threshold_time and 
+                distance_moved < self.drag_threshold_distance and
+                is_hovered and
+                not is_disabled):
+                clicked = True
+            
+            # Clean up tracking for this button
+            del self.button_press_start_time[name]
+            del self.button_press_start_pos[name]
+        
+        imgui.pop_id()
+        return clicked
+    
+    def render_custom_title_bar(self):
+        """Render custom title bar with minimize and close buttons"""
+        # Title bar window
+        window_width = self.get_window_width()
+        imgui.set_next_window_position(0, 0)
+        imgui.set_next_window_size(window_width, CUSTOM_TITLE_BAR_HEIGHT)
+        
+        imgui.push_style_var(imgui.STYLE_WINDOW_ROUNDING, 0.0)
+        imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (8, 6))
+        imgui.push_style_var(imgui.STYLE_WINDOW_BORDERSIZE, 0.0)
+        
+        # Title bar background color (darker than menu bar)
+        if self.dark_mode:
+            imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, 0.12, 0.12, 0.12, 1.0)
+        else:
+            imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, 0.85, 0.85, 0.85, 1.0)
+        
+        flags = (
+            imgui.WINDOW_NO_TITLE_BAR |
+            imgui.WINDOW_NO_RESIZE |
+            imgui.WINDOW_NO_MOVE |
+            imgui.WINDOW_NO_SCROLLBAR
         )
         
-        # Add auto-update Source2Viewer toggle
-        self.auto_update_s2v_var = tk.BooleanVar(value=self.settings.get('auto_update_source2viewer', True))
-        self.settings_menu.add_checkbutton(
-            label="Auto Update Source2Viewer",
-            variable=self.auto_update_s2v_var,
-            command=self.toggle_auto_update_source2viewer
+        imgui.begin("##titlebar", flags=flags)
+        
+        # Draw icon if available
+        if "title_icon" in self.button_icons:
+            imgui.image(self.button_icons["title_icon"], 16, 16)
+            imgui.same_line(spacing=4)
+        
+        # Title text
+        imgui.text(WINDOW_TITLE)
+        
+        # Get the position for the buttons (right side)
+        button_size = 20
+        button_spacing = 4
+        total_button_width = (button_size * 2) + button_spacing  # Minimize + Close
+        
+        window_width = self.get_window_width()
+        imgui.same_line(window_width - total_button_width - 6)
+        
+        # VS Code style buttons - flat, no borders when not hovered
+        imgui.push_style_var(imgui.STYLE_FRAME_ROUNDING, 0.0)
+        
+        # Minimize button (VS Code style)
+        imgui.push_style_color(imgui.COLOR_BUTTON, 0.0, 0.0, 0.0, 0.0)  # Transparent
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.2, 0.2, 0.2, 1.0)  # Dark gray
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.15, 0.15, 1.0)
+        imgui.push_style_color(imgui.COLOR_BORDER, 0.0, 0.0, 0.0, 0.0)  # No border
+        
+        minimize_clicked = imgui.button("##minimize", width=button_size, height=button_size)
+        if imgui.is_item_hovered():
+            self.should_show_hand = True
+        
+        # Draw centered minimize symbol manually
+        min_button_min = imgui.get_item_rect_min()
+        min_button_max = imgui.get_item_rect_max()
+        draw_list = imgui.get_window_draw_list()
+        
+        # Draw a centered horizontal line for minimize
+        line_width = 8
+        line_height = 1
+        line_x = min_button_min.x + (button_size - line_width) // 2
+        line_y = min_button_min.y + (button_size - line_height) // 2
+        text_color = imgui.get_color_u32_rgba(0.8, 0.8, 0.8, 1.0)
+        draw_list.add_rect_filled(line_x, line_y, line_x + line_width, line_y + line_height + 1, text_color)
+        
+        imgui.pop_style_color(4)
+        
+        if minimize_clicked:
+            glfw.iconify_window(self.window)
+        
+        imgui.same_line(spacing=button_spacing)
+        
+        # Close button (VS Code style - red hover)
+        imgui.push_style_color(imgui.COLOR_BUTTON, 0.0, 0.0, 0.0, 0.0)  # Transparent
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.9, 0.2, 0.2, 1.0)  # Red
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.8, 0.15, 0.15, 1.0)
+        imgui.push_style_color(imgui.COLOR_BORDER, 0.0, 0.0, 0.0, 0.0)  # No border
+        
+        close_clicked = imgui.button("##close", width=button_size, height=button_size)
+        if imgui.is_item_hovered():
+            self.should_show_hand = True
+        
+        # Draw centered X symbol manually
+        close_button_min = imgui.get_item_rect_min()
+        close_button_max = imgui.get_item_rect_max()
+        
+        # Calculate center of button
+        center_x = close_button_min.x + button_size // 2
+        center_y = close_button_min.y + button_size // 2
+        
+        # Draw X with two lines
+        x_size = 6
+        draw_list.add_line(
+            center_x - x_size // 2, center_y - x_size // 2,
+            center_x + x_size // 2, center_y + x_size // 2,
+            text_color, 1.5
+        )
+        draw_list.add_line(
+            center_x + x_size // 2, center_y - x_size // 2,
+            center_x - x_size // 2, center_y + x_size // 2,
+            text_color, 1.5
         )
         
-        # Add GitHub button to menubar next to Settings
-        self.menubar.add_command(label="Github", command=self.open_github)
-
-    def set_source2viewer_path(self):
-        """Open file dialog to set Source2Viewer.exe path"""
-        file_path = filedialog.askopenfilename(
-            title="Select Source2Viewer.exe",
-            filetypes=[("Executable files", "*.exe")]
-        )
-        if file_path:
-            self.settings.set('source2viewer_path', file_path)
-
-    def source2viewer_click(self):
-        """Handler for Source2Viewer button - runs S2V-AUL.py script or launches directly"""
-        auto_update = self.settings.get('auto_update_source2viewer', True)
+        imgui.pop_style_color(4)
         
-        if auto_update:
-            # Run the update script
-            script_path = "S2V-AUL.py"
+        if close_clicked:
+            glfw.set_window_should_close(self.window, True)
+        
+        # Restore style
+        imgui.pop_style_var(1)
+        
+        # Handle window dragging from title bar
+        if imgui.is_window_hovered() and imgui.is_mouse_clicked(0):
+            # Check if not clicking on buttons
+            mouse_pos = imgui.get_mouse_pos()
+            window_width = self.get_window_width()
+            if mouse_pos.x < window_width - total_button_width - 15:
+                self.dragging_window = True
+                window_pos = glfw.get_window_pos(self.window)
+                self.drag_offset_x = mouse_pos.x
+                self.drag_offset_y = mouse_pos.y
+        
+        imgui.end()
+        imgui.pop_style_color(1)
+        imgui.pop_style_var(3)
+    
+    def render_menu_bar(self):
+        """Render menu bar"""
+        if imgui.begin_menu_bar():
+            # View menu
+            view_menu_open = imgui.begin_menu("View")
+            if imgui.is_item_hovered():
+                self.should_show_hand = True
+            if view_menu_open:
+                for name, label in [
+                    ("dedicated_server", "Dedicated Server"),
+                    ("insecure", "Insecure"),
+                    ("listen", "Listen"),
+                    ("mapping", "Mapping"),
+                    ("source2viewer", "Source2 Viewer"),
+                    ("cs2importer", "CS2Importer"),
+                    ("skyboxconverter", "SkyboxConverter"),
+                    ("vtf2png", "VTF to PNG"),
+                    ("loading_screen", "Loading Screen Stuff"),
+                    ("point_worldtext", "point_worldtext")
+                ]:
+                    clicked, new_state = imgui.menu_item(
+                        label, None, self.button_visibility[name]
+                    )
+                    if imgui.is_item_hovered():
+                        self.should_show_hand = True
+                    if clicked:
+                        self.button_visibility[name] = new_state
+                        self.settings.set_button_visibility(name, new_state)
+                        
+                        # Recalculate and update window height and width
+                        new_height = self.calculate_window_height()
+                        new_width = self.get_window_width()
+                        if new_height != self.current_window_height:
+                            self.current_window_height = new_height
+                            glfw.set_window_size(self.window, new_width, new_height)
+                imgui.end_menu()
+            
+            # Links menu
+            links_menu_open = imgui.begin_menu("Links")
+            if imgui.is_item_hovered():
+                self.should_show_hand = True
+            if links_menu_open:
+                # Mapping API Wiki
+                if imgui.menu_item("Mapping API Wiki")[0]:
+                    import webbrowser
+                    webbrowser.open("https://github.com/KZGlobalTeam/cs2kz-metamod/wiki/Mapping-API")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # CS2KZ Metamod
+                if imgui.menu_item("CS2KZ Metamod")[0]:
+                    import webbrowser
+                    webbrowser.open("https://github.com/KZGlobalTeam/cs2kz-metamod")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # cs2kz.org
+                if imgui.menu_item("cs2kz.org")[0]:
+                    import webbrowser
+                    webbrowser.open("https://cs2kz.org")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # Source2Viewer
+                if imgui.menu_item("Source2Viewer")[0]:
+                    import webbrowser
+                    webbrowser.open("https://s2v.app/")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                imgui.end_menu()
+            
+            # Settings menu
+            settings_menu_open = imgui.begin_menu("Settings")
+            if imgui.is_item_hovered():
+                self.should_show_hand = True
+            if settings_menu_open:
+                clicked_theme = imgui.menu_item("Toggle Theme")[0]
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if clicked_theme:
+                    self.dark_mode = not self.dark_mode
+                    self.settings.set('appearance_mode', 'dark' if self.dark_mode else 'light')
+                    self.setup_style()
+                
+                # Compact Mode
+                clicked, new_state = imgui.menu_item(
+                    "Compact Mode", None, self.compact_mode
+                )
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if clicked:
+                    self.compact_mode = new_state
+                    self.settings.set('compact_mode', new_state)
+                    
+                    # Recalculate and update window size
+                    new_height = self.calculate_window_height()
+                    new_width = self.get_window_width()
+                    if new_height != self.current_window_height or new_width != glfw.get_window_size(self.window)[0]:
+                        self.current_window_height = new_height
+                        glfw.set_window_size(self.window, new_width, new_height)
+                
+                # Always on Top
+                clicked, new_state = imgui.menu_item(
+                    "Always on Top", None, self.always_on_top
+                )
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if clicked:
+                    self.always_on_top = new_state
+                    self.settings.set('always_on_top', new_state)
+                    glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE if new_state else glfw.FALSE)
+                
+                # Window Opacity Slider (compact single-line with text on left)
+                imgui.text("Opacity")
+                imgui.same_line()
+                
+                # Make the slider thinner with minimal padding
+                imgui.push_style_var(imgui.STYLE_FRAME_PADDING, (4, 2))
+                imgui.push_style_var(imgui.STYLE_GRAB_MIN_SIZE, 8)
+                imgui.set_next_item_width(120)
+                changed, new_opacity = imgui.slider_float("##opacity", self.window_opacity, 0.1, 1.0, "%.2f")
+                if imgui.is_item_hovered() or imgui.is_item_active():
+                    self.should_show_hand = True
+                imgui.pop_style_var(2)
+                
+                if changed:
+                    self.window_opacity = new_opacity
+                    self.settings.set('window_opacity', new_opacity)
+                    glfw.set_window_opacity(self.window, new_opacity)
+                
+                # Separator before button-related options
+                imgui.separator()
+                
+                # Button-related options
+                clicked, new_state = imgui.menu_item(
+                    "Auto Update Source2Viewer", None, self.auto_update_source2viewer
+                )
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if clicked:
+                    self.auto_update_source2viewer = new_state
+                    self.settings.set('auto_update_source2viewer', new_state)
+                
+                # Auto Update Metamod
+                clicked, new_state = imgui.menu_item(
+                    "Auto Update Metamod", None, self.auto_update_metamod
+                )
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if clicked:
+                    self.auto_update_metamod = new_state
+                    self.settings.set('auto_update_metamod', new_state)
+                
+                # Auto Update CS2KZ
+                clicked, new_state = imgui.menu_item(
+                    "Auto Update CS2KZ", None, self.auto_update_cs2kz
+                )
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if clicked:
+                    self.auto_update_cs2kz = new_state
+                    self.settings.set('auto_update_cs2kz', new_state)
+                
+                imgui.end_menu()
+            
+            # Push About to the right side of the menu bar
+            # Calculate available space and add spacing
+            menu_bar_width = imgui.get_window_width()
+            cursor_x = imgui.get_cursor_pos_x()
+            about_width = imgui.calc_text_size("About").x + 20  # Add padding
+            spacing = menu_bar_width - cursor_x - about_width
+            
+            if spacing > 0:
+                imgui.set_cursor_pos_x(cursor_x + spacing)
+            
+            # About menu (now on the right)
+            about_menu_open = imgui.begin_menu("About")
+            if imgui.is_item_hovered():
+                self.should_show_hand = True
+            if about_menu_open:
+                # Credits with clickable names
+                draw_list = imgui.get_window_draw_list()
+                
+                imgui.text("Made by ")
+                imgui.same_line(spacing=0)
+                
+                # zer0.k link - use selectable with exact width for inline layout
+                zer0k_width = imgui.calc_text_size("zer0.k").x
+                zer0k_clicked = imgui.selectable("zer0.k", False, flags=imgui.SELECTABLE_DONT_CLOSE_POPUPS, width=zer0k_width)[0]
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if zer0k_clicked:
+                    import webbrowser
+                    import threading
+                    threading.Thread(target=lambda: webbrowser.open("http://steamcommunity.com/profiles/76561198118681904"), daemon=True).start()
+                
+                imgui.same_line(spacing=0)
+                imgui.text(" and ")
+                imgui.same_line(spacing=0)
+                
+                # jakke link - use selectable with exact width for inline layout
+                jakke_width = imgui.calc_text_size("jakke").x
+                jakke_clicked = imgui.selectable("jakke", False, flags=imgui.SELECTABLE_DONT_CLOSE_POPUPS, width=jakke_width)[0]
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if jakke_clicked:
+                    import webbrowser
+                    import threading
+                    threading.Thread(target=lambda: webbrowser.open("http://steamcommunity.com/profiles/76561197981712950"), daemon=True).start()
+                
+                # Open Github link
+                github_clicked = imgui.menu_item("Open Github")[0]
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                if github_clicked:
+                    import webbrowser
+                    import threading
+                    threading.Thread(target=lambda: webbrowser.open("https://github.com/jakkekz/.jakke"), daemon=True).start()
+                
+                imgui.end_menu()
+            
+            imgui.end_menu_bar()
+    
+    def render_ui(self):
+        """Render the main UI - called every frame"""
+        # Render custom title bar first
+        self.render_custom_title_bar()
+        
+        # Set window flags - no scrollbars since we size the window to fit content
+        flags = (
+            imgui.WINDOW_NO_RESIZE |
+            imgui.WINDOW_NO_COLLAPSE |
+            imgui.WINDOW_NO_MOVE |
+            imgui.WINDOW_NO_SCROLLBAR |
+            imgui.WINDOW_NO_SCROLL_WITH_MOUSE |
+            imgui.WINDOW_NO_TITLE_BAR |  # Remove the title bar
+            imgui.WINDOW_MENU_BAR
+        )
+        
+        # Main window - positioned below title bar
+        window_width = self.get_window_width()
+        imgui.set_next_window_position(0, CUSTOM_TITLE_BAR_HEIGHT)
+        imgui.set_next_window_size(window_width, self.current_window_height - CUSTOM_TITLE_BAR_HEIGHT)
+        
+        # Make window background transparent to show background image
+        imgui.push_style_var(imgui.STYLE_WINDOW_BORDERSIZE, 0.0)
+        imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (14, 14))
+        
+        imgui.begin("##main", flags=flags)  # Use ## to hide label
+        
+        # Menu bar
+        self.render_menu_bar()
+        
+        # Button configurations with display names
+        button_configs = {
+            "dedicated_server": ("Dedicated\nServer", "dedicated_server"),
+            "insecure": ("Insecure", "insecure"),
+            "listen": ("Listen", "listen"),
+            "mapping": ("Mapping", "mapping"),
+            "source2viewer": ("Source2Viewer", "source2viewer"),
+            "cs2importer": ("CS2Importer", "cs2importer"),
+            "skyboxconverter": ("Skybox\nConverter", "skyboxconverter"),
+            "vtf2png": ("VTF to PNG", "vtf2png"),
+            "loading_screen": ("Loading\nScreen", "loading_screen"),
+            "point_worldtext": ("point_worldtext", "point_worldtext")
+        }
+        
+        # Render buttons in order, 2 columns or 1 column based on compact mode
+        col = 0
+        max_cols = 1 if self.compact_mode else 2
+        
+        for button_name in self.button_order:
+            if button_name in button_configs and self.button_visibility.get(button_name, True):
+                label, icon = button_configs[button_name]
+                
+                if col > 0:
+                    imgui.same_line(spacing=BUTTON_SPACING)
+                
+                if self.render_button(button_name, label, icon):
+                    self.handle_button_click(button_name)
+                
+                col += 1
+                if col >= max_cols:
+                    col = 0
+        
+        # Check which button the mouse is over during drag
+        if self.dragging_button is not None:
+            mouse_pos = imgui.get_mouse_pos()
+            self.hover_target = None
+            
+            # Check mouse position against all button bounds
+            for btn_name, (min_x, min_y, max_x, max_y) in self.button_positions.items():
+                if btn_name != self.dragging_button:
+                    if min_x <= mouse_pos.x <= max_x and min_y <= mouse_pos.y <= max_y:
+                        self.hover_target = btn_name
+                        break
+            
+            # Draw the dragged button following the mouse cursor
+            draw_list = imgui.get_window_draw_list()
+            
+            # Button size depends on compact mode
+            if self.compact_mode:
+                button_width = BUTTON_SIZE_COMPACT_WIDTH
+                button_height = BUTTON_SIZE_COMPACT_HEIGHT
+                icon_size = 24
+            else:
+                button_width = BUTTON_SIZE
+                button_height = BUTTON_SIZE
+                icon_size = 56
+            
+            drag_x = mouse_pos.x - button_width // 2
+            drag_y = mouse_pos.y - button_height // 2
+            
+            # Draw semi-transparent button background
+            bg_color = imgui.get_color_u32_rgba(0.29, 0.29, 0.29, 0.8) if self.dark_mode else imgui.get_color_u32_rgba(0.75, 0.75, 0.75, 0.8)
+            draw_list.add_rect_filled(drag_x, drag_y, drag_x + button_width, drag_y + button_height, bg_color, 7.0)
+            
+            # Draw icon if available
+            text_color = imgui.get_color_u32_rgba(1, 1, 1, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.1, 0.1, 0.1, 1)
+            
+            if self.compact_mode:
+                # Compact mode: icon on left, text on right
+                if self.dragged_button_icon and self.dragged_button_icon in self.button_icons:
+                    texture = self.button_icons[self.dragged_button_icon]
+                    icon_x = drag_x + 8
+                    icon_y = drag_y + (button_height - icon_size) // 2
+                    draw_list.add_image(texture, (icon_x, icon_y), (icon_x + icon_size, icon_y + icon_size))
+                    text_x = icon_x + icon_size + 8
+                    text_y = drag_y + (button_height - 12) // 2
+                else:
+                    text_x = drag_x + 8
+                    text_y = drag_y + (button_height - 12) // 2
+                
+                # Draw label (single line)
+                single_line_label = self.dragged_button_label.replace('\n', ' ')
+                draw_list.add_text(text_x, text_y, text_color, single_line_label)
+            else:
+                # Normal mode: icon on top, text below
+                if self.dragged_button_icon and self.dragged_button_icon in self.button_icons:
+                    texture = self.button_icons[self.dragged_button_icon]
+                    icon_x = drag_x + (button_width - icon_size) // 2
+                    icon_y = drag_y + 15
+                    draw_list.add_image(texture, (icon_x, icon_y), (icon_x + icon_size, icon_y + icon_size))
+                    text_y = icon_y + icon_size + 8
+                else:
+                    text_y = drag_y + 45
+                
+                # Draw label (multi-line)
+                lines = self.dragged_button_label.split('\n')
+                for i, line in enumerate(lines):
+                    text_width = imgui.calc_text_size(line).x
+                    text_x = drag_x + (button_width - text_width) // 2
+                    draw_list.add_text(text_x, text_y + i * 12, text_color, line)
+        
+        # Handle global drag-drop release (swap buttons when mouse is released)
+        if imgui.is_mouse_released(0) and self.dragging_button is not None:
+            if self.hover_target is not None:
+                self.swap_buttons(self.dragging_button, self.hover_target)
+            self.dragging_button = None
+            self.hover_target = None
+            self.dragged_button_icon = None
+            self.dragged_button_label = None
+        
+        imgui.end()
+        imgui.pop_style_var(2)
+    
+    def handle_button_click(self, button_name):
+        """Handle button clicks"""
+        if button_name == "dedicated_server":
+            script_path = os.path.join("scripts", "run-dedicated.py")
+            if os.path.exists(script_path):
+                try:
+                    # Pass settings as command-line arguments
+                    args = [sys.executable, script_path]
+                    if not self.auto_update_metamod:
+                        args.append('--no-update-metamod')
+                    if not self.auto_update_cs2kz:
+                        args.append('--no-update-cs2kz')
+                    subprocess.Popen(args)
+                except Exception as e:
+                    print(f"Error running run-dedicated.py: {e}")
+        
+        elif button_name == "insecure":
+            script_path = os.path.join("scripts", "run-insecure.py")
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
                 except Exception as e:
-                    print(f"Error running S2V-AUL.py: {e}")
-            else:
-                print(f"Warning: {script_path} not found in the current directory")
-        else:
-            # Launch Source2Viewer.exe directly from temp folder
-            temp_dir = self.settings.temp_dir
-            s2v_path = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'Source2Viewer.exe')
-            
-            if os.path.exists(s2v_path):
+                    print(f"Error running run-insecure.py: {e}")
+        
+        elif button_name == "listen":
+            script_path = os.path.join("scripts", "listen.py")
+            if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([s2v_path])
+                    # Pass settings as command-line arguments
+                    args = [sys.executable, script_path]
+                    if not self.auto_update_metamod:
+                        args.append('--no-update-metamod')
+                    if not self.auto_update_cs2kz:
+                        args.append('--no-update-cs2kz')
+                    subprocess.Popen(args)
                 except Exception as e:
-                    print(f"Error launching Source2Viewer: {e}")
+                    print(f"Error running listen.py: {e}")
+        
+        elif button_name == "mapping":
+            script_path = os.path.join("scripts", "mapping.py")
+            if os.path.exists(script_path):
+                try:
+                    # Pass settings as command-line arguments
+                    args = [sys.executable, script_path]
+                    if not self.auto_update_metamod:
+                        args.append('--no-update-metamod')
+                    if not self.auto_update_cs2kz:
+                        args.append('--no-update-cs2kz')
+                    subprocess.Popen(args)
+                except Exception as e:
+                    print(f"Error running mapping.py: {e}")
+        
+        elif button_name == "source2viewer":
+            if self.auto_update_source2viewer:
+                script_path = os.path.join("scripts", "S2V-AUL.py")
+                if os.path.exists(script_path):
+                    try:
+                        subprocess.Popen([sys.executable, script_path])
+                    except Exception as e:
+                        print(f"Error running S2V-AUL.py: {e}")
+                else:
+                    print(f"Warning: {script_path} not found in the scripts directory")
             else:
-                print(f"Warning: Source2Viewer.exe not found at {s2v_path}")
-                print("Enable auto-update in Settings to download it automatically.")
-
-    def __init__(self):
-        # Initialize settings manager first
-        self.settings = SettingsManager()
+                # Launch Source2Viewer.exe directly from temp folder
+                temp_dir = self.settings.temp_dir
+                s2v_path = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'Source2Viewer.exe')
+                
+                if os.path.exists(s2v_path):
+                    try:
+                        subprocess.Popen([s2v_path])
+                    except Exception as e:
+                        print(f"Error launching Source2Viewer: {e}")
+                else:
+                    print(f"Warning: Source2Viewer.exe not found at {s2v_path}")
+                    print("Enable auto-update in Settings to download it automatically.")
         
-        # Initialize base class with theme settings
-        super().__init__()
+        elif button_name == "cs2importer":
+            print("CS2Importer clicked")
         
-        # Set appearance mode from settings
-        appearance_mode = self.settings.get('appearance_mode', 'system')
-        ctk.set_appearance_mode(appearance_mode)
+        elif button_name == "skyboxconverter":
+            script_path = os.path.join("scripts", "skybox_gui.py")
+            if os.path.exists(script_path):
+                try:
+                    subprocess.Popen([sys.executable, script_path])
+                except Exception as e:
+                    print(f"Error running skybox_gui.py: {e}")
         
-        # Set color theme from settings
-        color_theme = self.settings.get('color_theme', 'blue')
-        ctk.set_default_color_theme(color_theme)
+        elif button_name == "vtf2png":
+            script_path = os.path.join("scripts", "vtf2png_gui.py")
+            if os.path.exists(script_path):
+                try:
+                    subprocess.Popen([sys.executable, script_path])
+                except Exception as e:
+                    print(f"Error running vtf2png_gui.py: {e}")
         
-        # Configure window
-        self.title("CS2KZ Mapping Tools")
-        self.resizable(False, False)
+        elif button_name == "loading_screen":
+            script_path = os.path.join("scripts", "creator_gui.py")
+            if os.path.exists(script_path):
+                try:
+                    subprocess.Popen([sys.executable, script_path])
+                except Exception as e:
+                    print(f"Error running creator_gui.py: {e}")
         
-        # CRITICAL: Prevent window from auto-resizing based on content
-        self.grid_propagate(False)
-        
-        # Set background image using Canvas
-        try:
-            from PIL import Image, ImageTk
-            # Create canvas for background that fills the window
-            self.bg_canvas = tk.Canvas(self, highlightthickness=0, bd=0)
-            self.bg_canvas.place(x=0, y=0, relwidth=1, relheight=1)
-            self.bg_photo = None
-        except Exception as e:
-            print(f"Error loading background image: {e}")
-        
-        # Create main frame with transparent background so bg1.jpg shows through
-        self.main_frame = ctk.CTkFrame(
-            self,
-            corner_radius=10,
-            fg_color="transparent"  # Transparent to show background image
-        )
-        self.main_frame.grid(row=0, column=0, padx=(14, 14), pady=(14, 14), sticky="nsew")  # 20 * 0.7 = 14
-        
-        # Configure grid spacing with equal padding
-        self.grid_columnconfigure(0, weight=1)  # Center the main frame
-        self.main_frame.grid_columnconfigure(0, weight=1, pad=7)  # 10 * 0.7 = 7
-        self.main_frame.grid_columnconfigure(1, weight=1, pad=7)  # 10 * 0.7 = 7
-        for i in range(3):  # Support up to 3 rows
-            self.main_frame.grid_rowconfigure(i, weight=1, pad=7)  # 10 * 0.7 = 7
-        
-        # Set custom icon
-        try:
-            self.iconbitmap(os.path.join("icons", "hammerkz.ico"))
-        except tk.TclError:
-            print("Warning: icons/hammerkz.ico not found in the current directory")
-        
-        # Create menu bar (after main_frame creation)
-        self.create_menu()
-
-        # Configure frame grid columns for fixed button sizes
-        self.main_frame.grid_columnconfigure(0, minsize=105)  # 150 * 0.7 = 105
-        self.main_frame.grid_columnconfigure(1, minsize=105)  # 150 * 0.7 = 105
-
-        # Create all buttons
-        self.dedicated_server_btn = RoundedButton(
-            self.main_frame, 
-            text="Dedicated\nServer",
-            command=self.dedicated_server_click,
-            image_path=os.path.join("icons", "icondedicated.ico") if os.path.exists(os.path.join("icons", "icondedicated.ico")) else None,
-            button_name="dedicated_server",
-            app=self
-        )
-        
-        self.insecure_btn = RoundedButton(
-            self.main_frame, 
-            text="Insecure",
-            command=self.insecure_click,
-            image_path=os.path.join("icons", "iconinsecure.ico") if os.path.exists(os.path.join("icons", "iconinsecure.ico")) else None,
-            button_name="insecure",
-            app=self
-        )
-        
-        self.listen_btn = RoundedButton(
-            self.main_frame, 
-            text="Listen",
-            command=self.listen_click,
-            image_path=os.path.join("icons", "iconlisten.ico") if os.path.exists(os.path.join("icons", "iconlisten.ico")) else None,
-            button_name="listen",
-            app=self
-        )
-        
-        self.mapping_btn = RoundedButton(
-            self.main_frame, 
-            text="Mapping",
-            command=self.mapping_click,
-            image_path=os.path.join("icons", "hammerkz.ico") if os.path.exists(os.path.join("icons", "hammerkz.ico")) else None,
-            button_name="mapping",
-            app=self
-        )
-        
-        self.source2viewer_btn = RoundedButton(
-            self.main_frame, 
-            text="Source2Viewer",
-            command=self.source2viewer_click,
-            image_path=os.path.join("icons", "source2viewer.ico") if os.path.exists(os.path.join("icons", "source2viewer.ico")) else None,
-            settings_command=self.set_source2viewer_path,
-            grid_column=1,  # Assuming Source2Viewer is in the right column
-            button_name="source2viewer",
-            app=self
-        )
-        
-        # Store all buttons in a list for easy management
-        self.all_buttons = [
-            self.dedicated_server_btn,
-            self.insecure_btn,
-            self.listen_btn,
-            self.mapping_btn,
-            self.source2viewer_btn
-        ]
-        
-        # Bind window close event to save settings
-        self.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        # Create menu bar and buttons
-        self.create_menu()
-        
-        # Apply initial layout
-        self.update_button_grid()
-        
-        # Update background image after window is sized
-        if hasattr(self, 'bg_canvas') and os.path.exists(os.path.join("icons", "bg1.jpg")):
-            self.after(100, self.update_background_image)
+        elif button_name == "point_worldtext":
+            print("point_worldtext clicked")
     
-    def update_background_image(self):
-        """Update the background image to match window width and theme"""
-        try:
-            from PIL import Image, ImageTk
-            
-            # Select background image based on theme
-            is_dark = ctk.get_appearance_mode() == "Dark"
-            bg_file = os.path.join("icons", "bg1dark.jpg") if is_dark else os.path.join("icons", "bg1light.jpg")
-            
-            # Check if the theme-specific image exists, fallback to bg1dark.jpg
-            if not os.path.exists(bg_file):
-                bg_file = os.path.join("icons", "bg1dark.jpg")
-                if not os.path.exists(bg_file):
-                    print(f"Warning: No background image found (tried icons/bg1dark.jpg, icons/bg1light.jpg)")
-                    return
-            
-            bg_image = Image.open(bg_file)
-            
-            window_width = self.winfo_width()
-            window_height = self.winfo_height()
-            
-            if window_width > 1 and window_height > 1:  # Ensure valid dimensions
-                # Get original image dimensions
-                original_width, original_height = bg_image.size
-                
-                # Scale only based on width, maintain aspect ratio
-                scale_factor = window_width / original_width
-                new_width = window_width
-                new_height = int(original_height * scale_factor)
-                
-                # Resize image
-                bg_image = bg_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                self.bg_photo = ImageTk.PhotoImage(bg_image)
-                
-                # Clear canvas and add image from the bottom
-                self.bg_canvas.delete("all")
-                self.bg_canvas.create_image(0, window_height, image=self.bg_photo, anchor="sw")
-                
-                print(f"Background image loaded: {bg_file} - {new_width}x{new_height} (window: {window_width}x{window_height})")
-            else:
-                # Retry if window isn't sized yet
-                self.after(100, self.update_background_image)
-        except Exception as e:
-            print(f"Error updating background image: {e}")
-
-    def set_source2viewer_path(self):
-        """Open file dialog to set Source2Viewer.exe path"""
-        file_path = filedialog.askopenfilename(
-            title="Select Source2Viewer.exe",
-            filetypes=[("Executable files", "*.exe")]
-        )
-        if file_path:
-            self.settings.set('source2viewer_path', file_path)
-
-    def on_closing(self):
-        # Save current window position
-        self.settings.set_window_position(self.winfo_x(), self.winfo_y())
+    def run(self):
+        """Main application loop"""
+        self.init_window()
         
-        # Save current button visibility states
-        for name, var in self.button_vars.items():
-            self.settings.set_button_visibility(name, var.get())
+        # Track time for CS2 detection
+        import time
+        last_cs2_check = 0
+        cs2_check_interval = 2.0  # Check every 2 seconds (reduced overhead)
+        
+        # Track if window has been shown (to prevent black flash)
+        window_shown = False
+        
+        while not glfw.window_should_close(self.window):
+            glfw.poll_events()
+            self.impl.process_inputs()
             
-        # Destroy the window
-        self.destroy()
+            # Periodically check if CS2 is running
+            current_time = time.time()
+            if current_time - last_cs2_check >= cs2_check_interval:
+                self.cs2_running = self.is_cs2_running()
+                last_cs2_check = current_time
+            
+            # Reset cursor flags at the start of each frame
+            self.should_show_hand = False
+            
+            # Handle window dragging
+            if self.dragging_window:
+                if imgui.is_mouse_down(0):
+                    # Update window position while dragging
+                    mouse_x, mouse_y = glfw.get_cursor_pos(self.window)
+                    window_pos = glfw.get_window_pos(self.window)
+                    new_x = int(window_pos[0] + mouse_x - self.drag_offset_x)
+                    new_y = int(window_pos[1] + mouse_y - self.drag_offset_y)
+                    glfw.set_window_pos(self.window, new_x, new_y)
+                else:
+                    # Stop dragging when mouse released
+                    self.dragging_window = False
+            
+            # Start ImGui frame first
+            imgui.new_frame()
+            
+            # Render UI
+            self.render_ui()
+            
+            # Rendering
+            gl.glClearColor(0.1, 0.1, 0.1, 1.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            
+            imgui.render()
+            self.impl.render(imgui.get_draw_data())
+            
+            # Update cursor based on flags
+            if self.dragging_button is not None or self.should_show_hand:
+                self.set_cursor("hand")
+            else:
+                self.set_cursor("arrow")
+            
+            glfw.swap_buffers(self.window)
+            
+            # Show window after first frame is rendered to prevent black flash
+            if not window_shown:
+                glfw.show_window(self.window)
+                window_shown = True
+        
+        # Save window position before closing
+        pos = glfw.get_window_pos(self.window)
+        self.settings.set_window_position(pos[0], pos[1])
+        
+        # Save all settings
+        for name, visible in self.button_visibility.items():
+            self.settings.set_button_visibility(name, visible)
+        
+        self.cleanup()
+    
+    def cleanup(self):
+        """Cleanup resources"""
+        # Destroy custom cursors
+        if self.arrow_cursor:
+            glfw.destroy_cursor(self.arrow_cursor)
+        if self.hand_cursor:
+            glfw.destroy_cursor(self.hand_cursor)
+        
+        self.impl.shutdown()
+        glfw.terminate()
 
-    def dedicated_server_click(self):
-        """Handler for dedicated server button"""
-        print("Dedicated Server clicked")
-
-    def insecure_click(self):
-        """Handler for insecure button"""
-        print("Insecure clicked")
-
-    def listen_click(self):
-        """Handler for listen button"""
-        script_path = "listen.py"
-        if os.path.exists(script_path):
-            try:
-                subprocess.Popen([sys.executable, script_path])
-            except Exception as e:
-                print(f"Error running listen.py: {e}")
-        else:
-            print(f"Warning: {script_path} not found in the current directory")
-
-    def mapping_click(self):
-        """Handler for mapping button"""
-        script_path = "mapping.py"
-        if os.path.exists(script_path):
-            try:
-                subprocess.Popen([sys.executable, script_path])
-            except Exception as e:
-                print(f"Error running mapping.py: {e}")
-        else:
-            print(f"Warning: {script_path} not found in the current directory")
-
-    def open_config_directory(self):
-        """Opens the directory containing the config file"""
-        import os
-        import subprocess
-        config_path = self.settings.settings_file
-        config_dir = os.path.dirname(config_path)
-        # Use explorer to open the directory
-        subprocess.run(['explorer', config_dir])
 
 if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+    print("CS2KZ Mapping Tools - PyImGui Version")
+    print("=" * 50)
+    
+    try:
+        app = ImGuiApp()
+        app.run()
+    except ImportError as e:
+        print(f"\nMissing dependency: {e}")
+        print("\nInstall required packages with:")
+        print("  pip install imgui[glfw] PyOpenGL pillow")
+        print("\nOr install all at once:")
+        print("  pip install imgui[glfw] PyOpenGL pillow")
+    except Exception as e:
+        print(f"\nError: {e}")
+        import traceback
+        traceback.print_exc()

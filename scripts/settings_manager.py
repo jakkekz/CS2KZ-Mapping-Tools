@@ -15,15 +15,23 @@ class SettingsManager:
                 'insecure': True,
                 'listen': True,
                 'mapping': True,
-                'source2viewer': True
+                'source2viewer': True,
+                'cs2importer': True,
+                'skyboxconverter': True,
+                'loading_screen': True,
+                'point_worldtext': True,
+                'vtf2png': True
             },
-            'button_order': ['dedicated_server', 'insecure', 'listen', 'mapping', 'source2viewer'],  # Custom button order
+            'button_order': ['dedicated_server', 'insecure', 'listen', 'mapping', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png'],  # Custom button order
             'window_position': None,  # Will store as [x, y]
             'appearance_mode': 'system',  # For CustomTkinter
             'color_theme': 'blue',  # For CustomTkinter
             'source2viewer_path': None,  # Path to Source2Viewer.exe
             'show_move_icons': False,  # Show move icons on buttons
-            'auto_update_source2viewer': True  # Auto update Source2Viewer via S2V-AUL.py
+            'auto_update_source2viewer': True,  # Auto update Source2Viewer via S2V-AUL.py
+            'compact_mode': False,  # Slim buttons in single column
+            'auto_update_metamod': True,  # Auto check and update Metamod
+            'auto_update_cs2kz': True  # Auto check and update CS2KZ plugin
         }
         self.settings = self.load_settings()
 
@@ -31,7 +39,22 @@ class SettingsManager:
         try:
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r') as f:
-                    return {**self.default_settings, **json.load(f)}
+                    loaded = json.load(f)
+                    # Merge settings, but ensure new buttons are added
+                    merged = self.default_settings.copy()
+                    for key, value in loaded.items():
+                        if key == 'visible_buttons':
+                            # Merge visible_buttons: keep loaded values, add new defaults
+                            merged[key] = {**self.default_settings['visible_buttons'], **value}
+                        elif key == 'button_order':
+                            # Merge button_order: add new buttons from defaults if not present
+                            for btn in self.default_settings['button_order']:
+                                if btn not in value:
+                                    value.append(btn)
+                            merged[key] = value
+                        else:
+                            merged[key] = value
+                    return merged
             return self.default_settings.copy()
         except Exception as e:
             print(f"Error loading settings: {e}")

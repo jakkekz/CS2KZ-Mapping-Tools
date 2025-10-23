@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 import urllib.request
 import hashlib
+import sys
 
 def get_steam_directory():
     try:
@@ -236,7 +237,7 @@ def save_versions(cs2_dir: str, versions: dict):
         for key, value in versions.items():
             f.write(f"{key}={value}\n")
 
-def check_setup_needed(cs2_dir: str):
+def check_setup_needed(cs2_dir: str, check_metamod=True, check_cs2kz=True):
     version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
     print(f"Checking versions at: {version_file}")
     
@@ -248,23 +249,34 @@ def check_setup_needed(cs2_dir: str):
     
     current_versions = load_versions(cs2_dir)
     
-    latest_metamod = get_latest_metamod_version()
-    latest_cs2kz = get_latest_cs2kz_version()
-    latest_mapping_api = get_mapping_api_hash()
+    if check_metamod:
+        latest_metamod = get_latest_metamod_version()
+        if latest_metamod and current_versions.get('metamod') != latest_metamod:
+            return True
     
-    if latest_metamod and current_versions.get('metamod') != latest_metamod:
-        return True
-    if latest_cs2kz and current_versions.get('cs2kz') != latest_cs2kz:
-        return True
-    if latest_mapping_api and current_versions.get('mapping_api') != latest_mapping_api:
-        return True
+    if check_cs2kz:
+        latest_cs2kz = get_latest_cs2kz_version()
+        latest_mapping_api = get_mapping_api_hash()
+        if latest_cs2kz and current_versions.get('cs2kz') != latest_cs2kz:
+            return True
+        if latest_mapping_api and current_versions.get('mapping_api') != latest_mapping_api:
+            return True
     
     return False
 
-def run_setup(cs2_dir: str):
+def run_setup(cs2_dir: str, update_metamod=True, update_cs2kz=True):
     print(f"Setting up CS2KZ in {cs2_dir}...")
-    download_and_extract_metamod(cs2_dir)
-    download_cs2kz(cs2_dir)
+    
+    if update_metamod:
+        download_and_extract_metamod(cs2_dir)
+    else:
+        print("Skipping Metamod update (disabled in settings)")
+    
+    if update_cs2kz:
+        download_cs2kz(cs2_dir)
+    else:
+        print("Skipping CS2KZ update (disabled in settings)")
+    
     try:
         setup_asset_bin(cs2_dir)
         setup_metamod_content_path(cs2_dir)
@@ -273,9 +285,9 @@ def run_setup(cs2_dir: str):
         print("This might be because mapping tools are probably not installed.")
     
     versions = {
-        'metamod': get_latest_metamod_version() or 'unknown',
-        'cs2kz': get_latest_cs2kz_version() or 'unknown',
-        'mapping_api': get_mapping_api_hash() or 'unknown'
+        'metamod': get_latest_metamod_version() or 'unknown' if update_metamod else load_versions(cs2_dir).get('metamod', 'unknown'),
+        'cs2kz': get_latest_cs2kz_version() or 'unknown' if update_cs2kz else load_versions(cs2_dir).get('cs2kz', 'unknown'),
+        'mapping_api': get_mapping_api_hash() or 'unknown' if update_cs2kz else load_versions(cs2_dir).get('mapping_api', 'unknown')
     }
     save_versions(cs2_dir, versions)
     print("Setup complete.")
@@ -314,15 +326,19 @@ def verify_gameinfo(path):
     print('Gameinfo files restored.')
 
 if __name__ == '__main__':
+    # Parse command-line arguments
+    update_metamod = '--no-update-metamod' not in sys.argv
+    update_cs2kz = '--no-update-cs2kz' not in sys.argv
+    
     path = get_cs2_path()
     if path is None:
         print('Failed to get CS2 path. Closing in 3 seconds...')
         time.sleep(3)
         exit()
     
-    if check_setup_needed(path):
+    if check_setup_needed(path, check_metamod=update_metamod, check_cs2kz=update_cs2kz):
         print("Setup needed - running installation...")
-        run_setup(path)
+        run_setup(path, update_metamod=update_metamod, update_cs2kz=update_cs2kz)
     else:
         print("Setup check passed - files up to date.")
     
