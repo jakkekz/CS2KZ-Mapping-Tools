@@ -50,14 +50,14 @@ def select_skybox_files():
         "• RIGHT: _right, right_, right., _rt, rt_, rt.\n"
         "• FRONT: _front, front_, front., _ft, ft_, ft.\n"
         "• BACK: _back, back_, back., _bk, bk_, bk.\n\n"
-        "Supported formats: PNG, JPG, TGA, VTF"
+        "Supported formats: VTF, PNG, JPG, JPEG, TGA, EXR"
     )
     
     # Ask user to select all 6 files at once
     file_paths = filedialog.askopenfilenames(
         title="Select all 6 skybox face images",
         filetypes=[
-            ("Image files", "*.png *.jpg *.jpeg *.tga *.vtf"),
+            ("Image files", "*.vtf *.png *.jpg *.jpeg *.tga *.exr"),
             ("All files", "*.*")
         ]
     )
@@ -122,10 +122,40 @@ def select_skybox_files():
     
     return files
 
+def ask_vmat_preferences():
+    """Ask user which VMAT files they want to create (before selecting output location)"""
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    
+    # Ask about Skybox material
+    create_skybox = messagebox.askyesno(
+        "Skybox Material",
+        "Do you want to create a Skybox Material?\n\n(Uses standard sky.vfx shader)",
+        parent=root
+    )
+    
+    # Ask about Moondome material
+    create_moondome = messagebox.askyesno(
+        "Moondome Material",
+        "Do you want to create a Moondome Material?\n\n(Uses csgo_moondome.vfx shader)",
+        parent=root
+    )
+    
+    root.destroy()
+    
+    return create_skybox, create_moondome
+
 def select_output_location():
     """Open dialog to select output file location"""
     root = tk.Tk()
     root.withdraw()
+    
+    # Show instructions
+    messagebox.showinfo(
+        "Choose Output Destination",
+        "Where do you want to save the skybox assets?"
+    )
     
     file_path = filedialog.asksaveasfilename(
         title="Save Skybox As",
@@ -138,6 +168,118 @@ def select_output_location():
         return None
     
     return file_path
+
+def get_ldr_vmat_content(sky_texture_path):
+    """Generates the VMAT content for standard skybox with the correct dynamic texture path."""
+    return f"""// THIS FILE IS AUTO-GENERATED (STANDARD SKYBOX)
+
+Layer0
+{{
+    shader "sky.vfx"
+
+    //---- Format ----
+    F_TEXTURE_FORMAT2 1 // Dxt1 (LDR)
+
+    //---- Texture ----
+    g_flBrightnessExposureBias "0.000"
+    g_flRenderOnlyExposureBias "0.000"
+    SkyTexture "{sky_texture_path}"
+
+
+    VariableState
+    {{
+        "Texture"
+        {{
+        }}
+    }}
+}}"""
+
+def get_moondome_vmat_content(sky_texture_path):
+    """Generates the Moondome VMAT content with the correct dynamic texture path."""
+    return f"""// THIS FILE IS AUTO-GENERATED (MOONDOME)
+
+Layer0
+{{
+    shader "csgo_moondome.vfx"
+
+    //---- Color ----
+    g_flTexCoordRotation "0.000"
+    g_nScaleTexCoordUByModelScaleAxis "0" // None
+    g_nScaleTexCoordVByModelScaleAxis "0" // None
+    g_vColorTint "[1.000000 1.000000 1.000000 0.000000]"
+    g_vTexCoordCenter "[0.500 0.500]"
+    g_vTexCoordOffset "[0.000 0.000]"
+    g_vTexCoordScale "[1.000 1.000]"
+    g_vTexCoordScrollSpeed "[0.000 0.000]"
+    TextureColor "[1.000000 1.000000 1.000000 0.000000]"
+
+    //---- CubeParallax ----
+    g_flCubeParallax "0.000"
+
+    //---- Fog ----
+    g_bFogEnabled "1"
+
+    //---- Texture ----
+    TextureCubeMap "{sky_texture_path}"
+
+    //---- Texture Address Mode ----
+    g_nTextureAddressModeU "0" // Wrap
+    g_nTextureAddressModeV "0" // Wrap
+
+
+    VariableState
+    {{
+        "Color"
+        {{
+        }}
+        "CubeParallax"
+        {{
+        }}
+        "Fog"
+        {{
+        }}
+        "Texture"
+        {{
+        }}
+        "Texture Address Mode"
+        {{
+        }}
+    }}
+}}"""
+
+def create_vmat_files(output_path, create_skybox, create_moondome):
+    """Create VMAT files based on user preferences"""
+    if not create_skybox and not create_moondome:
+        return []
+    
+    created_files = []
+    output_dir = os.path.dirname(output_path)
+    base_name = os.path.splitext(os.path.basename(output_path))[0]
+    png_filename = os.path.basename(output_path)
+    
+    # Engine texture path for VMAT (relative path from content folder)
+    # Assuming output is in a skybox folder or similar
+    sky_texture_path = f"materials/skybox/{png_filename}"
+    
+    try:
+        if create_skybox:
+            skybox_vmat_path = os.path.join(output_dir, f"skybox_{base_name}.vmat")
+            with open(skybox_vmat_path, 'w') as f:
+                f.write(get_ldr_vmat_content(sky_texture_path))
+            created_files.append(skybox_vmat_path)
+            print(f"Created Skybox VMAT: {os.path.basename(skybox_vmat_path)}")
+        
+        if create_moondome:
+            moondome_vmat_path = os.path.join(output_dir, f"moondome_{base_name}.vmat")
+            with open(moondome_vmat_path, 'w') as f:
+                f.write(get_moondome_vmat_content(sky_texture_path))
+            created_files.append(moondome_vmat_path)
+            print(f"Created Moondome VMAT: {os.path.basename(moondome_vmat_path)}")
+            
+    except Exception as e:
+        print(f"Error creating VMAT files: {e}")
+    
+    return created_files
 
 def convert_vtf_to_pil_image(vtf_path):
     """
@@ -249,6 +391,9 @@ def main():
     if not files:
         sys.exit(1)
     
+    # Ask about VMAT creation BEFORE selecting output location
+    create_skybox, create_moondome = ask_vmat_preferences()
+    
     # Select output location
     output_path = select_output_location()
     if not output_path:
@@ -257,11 +402,21 @@ def main():
     # Stitch the skybox
     success, message = stitch_skybox(files, output_path)
     
+    # Create VMAT files if requested and skybox was created successfully
+    vmat_files = []
+    if success:
+        vmat_files = create_vmat_files(output_path, create_skybox, create_moondome)
+    
     # Show result
     root = tk.Tk()
     root.withdraw()
     
     if success:
+        # Add VMAT info to success message
+        if vmat_files:
+            vmat_names = "\n".join([f"  • {os.path.basename(f)}" for f in vmat_files])
+            message += f"\n\nVMAT files created:\n{vmat_names}"
+        
         messagebox.showinfo("Success", message)
         # Open the folder containing the output image
         try:

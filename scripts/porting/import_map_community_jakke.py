@@ -1,0 +1,653 @@
+##########################################################################################################################################
+#
+# import_map script
+#  
+##########################################################################################################################################
+
+from __future__ import print_function
+import os
+import sys
+import argparse
+import time
+import ast
+
+# Add the current working directory to Python path so we can import utils
+# This script is meant to be run from CS2's import_scripts directory
+cwd = os.getcwd()
+if cwd not in sys.path:
+    sys.path.insert(0, cwd)
+
+from utils import utlc as utl
+
+##########################################################################################################################################
+# Case-insensitive file finder
+##########################################################################################################################################
+def FindFileInsensitive(path):
+	"""Find a file with case-insensitive matching. Returns the actual path if found, or original path if not."""
+	if os.path.exists(path):
+		return path
+	
+	# Split into directory and filename
+	directory = os.path.dirname(path)
+	filename = os.path.basename(path)
+	
+	if not os.path.exists(directory):
+		# Try to find directory case-insensitively
+		parent = os.path.dirname(directory)
+		dirname = os.path.basename(directory)
+		if os.path.exists(parent):
+			for item in os.listdir(parent):
+				if item.lower() == dirname.lower():
+					directory = os.path.join(parent, item)
+					break
+	
+	if os.path.exists(directory):
+		# Find file case-insensitively
+		for item in os.listdir(directory):
+			if item.lower() == filename.lower():
+				return os.path.join(directory, item)
+	
+	return path  # Return original if not found
+
+##########################################################################################################################################
+# Fix material file case to match VMF expectations
+##########################################################################################################################################
+def FixMaterialCase(vmf_path, game_dir):
+	"""Read VMF file and rename material files to match the case used in the VMF.
+	game_dir should point to the CS:GO installation root (contains 'csgo' folder)"""
+	import re
+	
+	try:
+		with open(vmf_path, 'r', encoding='utf-8', errors='ignore') as f:
+			vmf_content = f.read()
+		
+		# Find all material references in the VMF (they appear in "material" keys)
+		material_pattern = re.compile(r'"material"\s+"([^"]+)"', re.IGNORECASE)
+		materials = set(material_pattern.findall(vmf_content))
+		
+		# Also find materials in texture references
+		texture_pattern = re.compile(r'"texture"\s+"([^"]+)"', re.IGNORECASE)
+		materials.update(texture_pattern.findall(vmf_content))
+		
+		print(f"Found {len(materials)} unique material references in VMF")
+		
+		# For each material, try to find and rename the .vmt and .vtf files
+		renamed_count = 0
+		for material in materials:
+			# Clean up the material path
+			material = material.strip().replace('\\', '/')
+			if not material:
+				continue
+			
+			# Material path relative to csgo folder (materials are in csgo\materials)
+			vmt_rel_path = f"csgo\\materials\\{material}.vmt".replace('/', '\\')
+			vtf_rel_path = f"csgo\\materials\\{material}.vtf".replace('/', '\\')
+			
+			# Full paths in game directory
+			vmt_full = os.path.join(game_dir, vmt_rel_path).replace('\\\\', '\\')
+			vtf_full = os.path.join(game_dir, vtf_rel_path).replace('\\\\', '\\')
+			
+			# Find actual files case-insensitively
+			actual_vmt = FindFileInsensitive(vmt_full)
+			actual_vtf = FindFileInsensitive(vtf_full)
+			
+			# Rename if found and case doesn't match
+			if actual_vmt != vmt_full and os.path.exists(actual_vmt):
+				try:
+					# Ensure target directory exists
+					os.makedirs(os.path.dirname(vmt_full), exist_ok=True)
+					os.rename(actual_vmt, vmt_full)
+					print(f"Renamed: {os.path.basename(actual_vmt)} -> {os.path.basename(vmt_full)}")
+					renamed_count += 1
+				except Exception as e:
+					print(f"Warning: Could not rename {actual_vmt}: {e}")
+			
+			if actual_vtf != vtf_full and os.path.exists(actual_vtf):
+				try:
+					os.makedirs(os.path.dirname(vtf_full), exist_ok=True)
+					os.rename(actual_vtf, vtf_full)
+					print(f"Renamed: {os.path.basename(actual_vtf)} -> {os.path.basename(vtf_full)}")
+					renamed_count += 1
+				except Exception as e:
+					print(f"Warning: Could not rename {actual_vtf}: {e}")
+		
+		print(f"Fixed case for {renamed_count} material files")
+		
+	except Exception as e:
+		print(f"Warning: Error fixing material case: {e}")
+
+##########################################################################################################################################
+#
+##########################################################################################################################################
+def StripMDLsFromRefs( filename ):
+
+	refs = utl.ReadTextFile( filename )
+
+	mdls = []
+	others = []
+	utl.SplitMdlFromRefs( mdls, others, refs )
+
+	mdlfilename = filename.replace( "_refs.txt", "_mdl_lst.txt" )
+	utl.EnsureFileWritable( mdlfilename )
+	writeFile = open( mdlfilename, "w" )
+	[ writeFile.write( x + "\n" ) for x in mdls ]
+	writeFile.close()
+
+	refsfilename = filename.replace( "_refs.txt", "_new_refs.txt" )
+	utl.EnsureFileWritable( refsfilename )
+	writeFile = open( refsfilename, "w" )
+	writeFile.write( utl.RefsStringFromList( others ) )
+	writeFile.close()
+
+
+##########################################################################################################################################
+# Function to check meshinfo.txt and force 2UVs as required
+##########################################################################################################################################
+
+# Ensure the vmat has the F_FORCE_UV2 feature added
+def ForceUV2ForVMAT( mtlfile ):
+
+	vmatfilename = s2contentcsgoimported + "\\" + mtlfile.replace( ".vmt", ".vmat" )
+
+	if ( not os.path.exists( vmatfilename ) ):
+		return
+
+	vmatlist = utl.ReadTextFileNoStrip( vmatfilename )
+
+	utl.EnsureFileWritable( vmatfilename )
+
+	for line in range( len( vmatlist ) ):
+		txt = vmatlist[ line ].strip()
+		txt = txt.lower()
+		if txt.startswith( "\"shader\"" ):
+			# line + 1 assumed to be safe since there's always at least one more line after "Shader" "bla.vfx"
+			txtNext = vmatlist[ line + 1 ].strip()
+			txtNext = txtNext.replace( "\t", "" )
+			if ( not txtNext.startswith( "\"F_FORCE_UV2\"" ) ):
+				vmatlist.insert( line + 1, "\t\"F_FORCE_UV2\" \"1\"\n" )
+				break
+
+	print( "Added F_FORCE_UV2 to %s" % vmatfilename )
+	writeFile = open( vmatfilename, "w" )
+	writeFile.writelines( vmatlist )
+	writeFile.close()
+
+
+def Force2UVsIfRequired( refsName, global2UVMaterials, global2UVMaterialsFile ):
+
+	uvsUpdated = set()
+
+	meshinfofilename = refsName.replace( "_refs.txt", "_refs/mesh/meshinfo.txt").replace( "/", "\\" )
+
+	if ( not os.path.exists( meshinfofilename ) ):
+		return False
+
+	meshinfo = utl.ReadTextFile( meshinfofilename )
+	meshstring = "".join( meshinfo )
+	meshinfoparse = ast.literal_eval( meshstring )
+
+	b2UV = False
+
+	if ( not os.path.exists( refsName ) ):
+		return False
+
+	refs = utl.ReadTextFile( refsName )
+	refsString = utl.ListStringFromRefs( refs )
+	refsList = refsString.split( "\n" )
+
+	for mtlfile in refsList :
+
+		if ( not len( mtlfile ) ):
+			continue
+
+		if ( mtlfile in uvsUpdated ):
+			continue
+
+		# check if ANY materials in refslist is already a member of the global2UVMaterials, if so let's force compile the model and make sure the material still has the flag added
+		if ( mtlfile in global2UVMaterials ):
+			b2UV = True
+			uvsUpdated.add( mtlfile )
+
+		else:
+			# add new material to forceuv2 list
+			if ( meshinfoparse[ "numuvs" ] == 2 ):
+				b2UV = True
+				print ( "Adding F_FORCE_UV2 to mtls imported from %s..." % refsName )
+			
+				uvsUpdated.add( mtlfile )
+
+				if ( mtlfile not in global2UVMaterials ):
+					global2UVMaterialsFile.write( "%s\n" % mtlfile )
+					global2UVMaterials.add( mtlfile )
+
+				# Ensure the vmat has the F_FORCE_UV2 feature added
+				ForceUV2ForVMAT( mtlfile )
+
+
+	return b2UV
+
+##########################################################################################################################################
+#
+##########################################################################################################################################
+def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
+
+	# read list of models to convert
+	mdlfiles = utl.ReadTextFile( filename )
+
+	if ( len( mdlfiles ) < 1 ): 
+		print( "No MDLs to import" )
+		return 
+
+	print( "Importing models" )
+	print( "--------------------------------")
+	for x in mdlfiles : 
+		if ( x.startswith("-") == False):
+			print(x)	
+	print( "--------------------------------")
+
+	force2UVList = []
+	mdlmtls = set()
+
+	extraoptions = ""
+	for mdlfile in mdlfiles :
+		if ( mdlfile.startswith( "-" ) ):
+			if  ( ( mdlfile == "-" ) or ( mdlfile == "-nooptions" ) ):
+				extraoptions = ""
+			else:
+				extraoptions = mdlfile
+		else:
+			mdlfile = mdlfile.replace( "/", "\\" )
+			infile = mdlfile
+
+			outName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", ".vmdl" )
+			refsName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", "_refs.txt" )
+
+			# Import
+
+			importCmd = "cs_mdl_import -nop4 %s -i \"%s\" -o \"%s\" \"%s\"" % ( extraoptions, s1gamecsgo, s2contentcsgoimported, infile )
+			utl.RunCommand( importCmd, errorCallback )
+
+			# So we only import materials once, lets add their refs to a refsset, and import them after all models
+			if ( os.path.exists( refsName ) ):
+				refs = utl.ReadTextFile( refsName )
+				str = utl.ListStringFromRefs( refs )
+				mtllist = str.split( "\n" )
+				for mtlname in mtllist : mdlmtls.add( mtlname )
+
+				# collect refsNames so we can add 2UVs as required
+				force2UVList.append( refsName )
+
+	# import mtls used by mdl
+	mdlmtlrefs = utl.RefsStringFromList( list( mdlmtls ) )
+
+	temp_refs = filename.replace( "mdl_lst", "mtl_lst")
+	utl.EnsureFileWritable( temp_refs )
+	fw = open( temp_refs, "w" )
+	fw.write( mdlmtlrefs )
+	fw.close()
+
+	# Don't use -src1contentdir here - let source1import find assets in VPK files
+	importRefsCmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"%s\" -s2addon %s -game csgo -usefilelist \"%s\"" % ( s1gamecsgo, s2addon, temp_refs )
+	utl.RunCommand( importRefsCmd, errorCallback )
+
+	# read in global list of materials where we've forced uv2...
+	global2UVMaterials = set()
+	force2UVList = utl.ReadTextFile( "source1import_2uvmateriallist.txt" )
+	for mtl in force2UVList :
+		global2UVMaterials.add( mtl )
+		# Ensure all mtls in this list have the F_FORCE_UV2 feature added
+		ForceUV2ForVMAT( mtl )
+
+	# ...we may append to this file	
+	utl.EnsureFileWritable( "source1import_2uvmateriallist.txt" )
+	global2UVMaterialFile = open( "source1import_2uvmateriallist.txt", "a" )
+
+	# compile materials
+	# adding explicitly since we appear to miss a number of these if we rely on model compilation above to compile all materials refs too, even if we compile models with -f.
+	for mtlfile in mdlmtls :
+		if ( mtlfile.startswith( "-" ) or ( mtlfile == "" ) ):
+			continue
+		else:
+			mtlfile = mtlfile.replace( "/", "\\" )
+			outName = s2contentcsgoimported + "\\" + mtlfile.replace( ".vmt", ".vmat" )
+
+		resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
+		utl.RunCommand( resCompCmd, errorCallback )
+
+	# compile models
+	for mdlfile in mdlfiles :
+		bForceCompile = False
+		if ( mdlfile.startswith( "-" ) ):
+			continue
+		else:
+			mdlfile = mdlfile.replace( "/", "\\" )
+			outName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", ".vmdl" )
+
+			if ( not os.path.exists( outName ) ):
+				continue
+
+			refsName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", "_refs.txt" )
+			# commenting this out for now, not needed if we're always force compiling
+			bForceCompile = Force2UVsIfRequired( refsName, global2UVMaterials, global2UVMaterialFile )
+
+		# For now just let the map importer script do the compiles
+		# Compile Model ( should compile materials too ). Possibly add -f here when shader changes have happened.
+		if ( bForceCompile ):
+			resCompCmd = "resourcecompiler -retail -nop4 -f -game csgo \"%s\"" % ( outName )
+		else:
+			resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
+
+		utl.RunCommand( resCompCmd, errorCallback )
+
+	# close global 2uv material file
+	global2UVMaterialFile.close()
+
+
+
+##########################################################################################################################################
+#
+##########################################################################################################################################
+def ImportAndCompileMapRefs( refsFile, s2addon, errorCallback ):
+
+	# import map refs - don't use -src1contentdir so source1import can find assets in VPK files
+	importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + refsFile + "\""
+	utl.RunCommand( importcmd, errorCallback )
+
+	refs = utl.ReadTextFile( refsFile )
+	str = utl.ListStringFromRefs( refs )
+	flatList = str.split( "\n" )
+
+	newList = ""
+
+	for line in flatList:
+		if len( line ):
+			line = line.replace( ".vmt", ".vmat" )
+			line = line.replace( " ", "_" )
+			newList += s2contentcsgoimported + "\\" + line.replace( "/", "\\" ) + "\n"
+
+	tmpFile = s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_compile_new_refs.txt"
+	
+	# Ensure maps directory exists
+	maps_dir = os.path.dirname(tmpFile)
+	os.makedirs(maps_dir, exist_ok=True)
+	
+	utl.EnsureFileWritable( tmpFile )
+	writeFile = open( tmpFile, "w" )
+	writeFile.write( newList )
+	writeFile.close()
+
+	compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+	utl.RunCommand( compilercmd, errorCallback )
+
+##########################################################################################################################################
+# VPK Signature management functions
+##########################################################################################################################################
+def DisableVPKSignatures(s2gamecsgo):
+	"""Rename vpk.signatures to vpk.signatures.old to bypass VPK validation"""
+	vpk_sig_path = os.path.join(s2gamecsgo, "..", "bin", "win64", "vpk.signatures")
+	vpk_sig_old = vpk_sig_path + ".old"
+	
+	if os.path.exists(vpk_sig_path):
+		try:
+			# Rename to .old to disable signature checking
+			os.rename(vpk_sig_path, vpk_sig_old)
+			print(f"Disabled VPK signature checking (renamed to vpk.signatures.old)")
+			return vpk_sig_path, vpk_sig_old
+		except Exception as e:
+			print(f"Warning: Could not rename vpk.signatures: {e}")
+			return None, None
+	return None, None
+
+def RestoreVPKSignatures(vpk_sig_path, vpk_sig_old):
+	"""Restore vpk.signatures from .old"""
+	if vpk_sig_old and os.path.exists(vpk_sig_old):
+		try:
+			# Remove current file if it exists (shouldn't normally)
+			if os.path.exists(vpk_sig_path):
+				os.remove(vpk_sig_path)
+			# Rename .old back to original
+			os.rename(vpk_sig_old, vpk_sig_path)
+			print(f"Restored VPK signature checking")
+		except Exception as e:
+			print(f"Warning: Could not restore vpk.signatures: {e}")
+
+##########################################################################################################################################
+#
+##########################################################################################################################################
+
+#
+# START
+#
+
+start = time.time()
+
+# save VALVE_NO_AUTO_P4 environment var, set to 1 to ensure p4 lib works in a mode that is disconnected from p4
+utl.SaveEnv()
+
+# inputs
+parser = argparse.ArgumentParser( prog='import_map_community', description='Import a map (vmf) and its dependencies from s1 to s2' )
+parser.add_argument( 's1gameinfodir', help='path to s1 gameinfo.txt' )
+parser.add_argument( 's1contentdir', help='path to s1 content' )
+parser.add_argument( 's2gameinfodir', help='path to s2 gameinfo.gi' )
+parser.add_argument( 's2addon', help='s2 addon name')
+parser.add_argument( 'mapname', help='Name of map to import, relative to maps\\ in the csgo content directory' )
+parser.add_argument( '-usebsp', action='store_true', default=False, help='Generate and use bsp on import' )
+parser.add_argument( '-usebsp_nomergeinstances', action='store_true', default=False, help='if using bsp, do not merge instances' )
+parser.add_argument( '-skipdeps', action='store_true', default=False, help='do not import and compile dependencies (imports .vmf to .vmap only)' )
+args = parser.parse_args()
+
+mapname = args.mapname
+usebsp = args.usebsp
+nomergeinstances = args.usebsp_nomergeinstances
+skipdeps = args.skipdeps
+
+# setup paths
+s1gamecsgo = args.s1gameinfodir
+s1contentcsgo = args.s1contentdir
+s2gamecsgo = args.s2gameinfodir
+s2addon = args.s2addon
+
+s1gamecsgotxt = s1gamecsgo + "\\" + "gameinfo.txt"
+if ( not os.path.exists( s1gamecsgotxt ) ):
+	utl.Error( "%s not found, aborting" % s1gamecsgotxt )
+
+s2gamecsgogi = s2gamecsgo + "\\" + "gameinfo.gi"
+if ( not os.path.exists( s2gamecsgogi ) ):
+	utl.Error( "%s not found, aborting" % s2gamecsgogi )
+
+s2gameaddondir = "game\\csgo_addons\\" + s2addon
+s2gameaddon = s2gamecsgo.replace( "game\\csgo", s2gameaddondir )
+
+s2contentcsgo = s2gameaddon.replace( "game\csgo_addons", "content\csgo_addons" )
+s2contentcsgoimported = s2contentcsgo
+
+errorCallback = None
+
+# Disable VPK signature checking before starting import
+vpk_sig_path, vpk_sig_old = DisableVPKSignatures(s2gamecsgo)
+
+# Warning prompt removed - auto-continue for cs2importer integration
+
+# Verify CS:GO VPK files exist and are valid
+pak01_vpk = os.path.join(s1gamecsgo, "pak01_dir.vpk")
+if not os.path.exists(pak01_vpk):
+	print(f"\nERROR: CS:GO pak01_dir.vpk not found at: {pak01_vpk}")
+	print("The CS:GO installation appears to be incomplete or corrupted.")
+	print("\nTo fix this:")
+	print("1. Open Steam")
+	print("2. Right-click Counter-Strike 2 in your library")
+	print("3. Go to Properties > Installed Files > Verify integrity of game files")
+	print("4. Wait for Steam to verify and repair the CS:GO files")
+	print("\nNote: CS2 includes CS:GO files in the same installation.")
+	sys.exit(1)
+else:
+	print(f"Verified CS:GO VPK files exist at: {s1gamecsgo}")
+	# Check file size to ensure it's not corrupted
+	vpk_size = os.path.getsize(pak01_vpk)
+	if vpk_size < 1000:  # VPK dir files should be much larger
+		print(f"\nWARNING: pak01_dir.vpk appears corrupted (size: {vpk_size} bytes)")
+		print("Please verify game files integrity in Steam.")
+
+try:
+	# Fix material file case to match VMF before import
+	print("Fixing material file case to match VMF references...")
+	# s1contentcsgo already includes \maps, so don't add it again
+	vmf_file_path = s1contentcsgo + "\\" + mapname + ".vmf"
+	# Use s1gamecsgo (CS:GO installation path) instead of s1contentcsgo (Desktop path)
+	# because materials are in "Counter-Strike Global Offensive\csgo\materials"
+	materials_base_path = os.path.join(s1gamecsgo, "..")  # Go up one level from csgo folder
+	FixMaterialCase(vmf_file_path, materials_base_path)
+
+	# import vmf to vmap
+	mapImportCmd = "source1import -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1contentcsgo + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
+	utl.RunCommand( mapImportCmd, errorCallback )
+
+	# replace 'instance' paths with 'prefab' 
+	mapname = mapname.replace( "instances", "prefabs" )
+
+	if ( not skipdeps ):
+		# Check for embedded materials extracted from BSP
+		embedded_refs_file = s1contentcsgo + "\\" + mapname + "_embedded_refs.txt"
+		if os.path.exists(embedded_refs_file):
+			print(f"Found embedded materials from BSP extraction, importing...")
+			# Import embedded materials - need to specify content dir as csgo root since materials are there
+			importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + embedded_refs_file + "\""
+			utl.RunCommand( importcmd, errorCallback )
+			
+			# Now compile the imported materials
+			refs = utl.ReadTextFile( embedded_refs_file )
+			str = utl.ListStringFromRefs( refs )
+			flatList = str.split( "\n" )
+			
+			newList = ""
+			for line in flatList:
+				if len( line ):
+					line = line.replace( ".vmt", ".vmat" )
+					line = line.replace( " ", "_" )
+					newList += s2contentcsgoimported + "\\" + line.replace( "/", "\\" ) + "\n"
+			
+			tmpFile = s2contentcsgoimported + "\\maps\\" + mapname + "_embedded_compile_refs.txt"
+			maps_dir = os.path.dirname(tmpFile)
+			os.makedirs(maps_dir, exist_ok=True)
+			
+			utl.EnsureFileWritable( tmpFile )
+			writeFile = open( tmpFile, "w" )
+			writeFile.write( newList )
+			writeFile.close()
+			
+			compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+			utl.RunCommand( compilercmd, errorCallback )
+			
+			print("Re-importing VMF to update with compiled embedded materials...")
+			utl.RunCommand( mapImportCmd, errorCallback )
+		
+		# Check if refs file exists to process prefab dependencies
+		# Refs files are now in maps\ folder after the initial import
+		refs_file = s2contentcsgoimported + "\\maps\\" + mapname + "_refs.txt"
+		
+		if os.path.exists(refs_file):
+			print("Processing prefab dependencies...")
+			
+			# Create prefab refs by copying from main refs
+			prefab_refs_file = s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_refs.txt"
+			import shutil
+			shutil.copy(refs_file, prefab_refs_file)
+			
+			# Strip out models as they go through the new importer last
+			StripMDLsFromRefs( prefab_refs_file )
+
+			# Import and compile prefab models and their materials
+			ImportAndCompileMapMDLs( s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_mdl_lst.txt", s2addon, errorCallback )
+
+			# Import and compile prefab refs (excluding mdls) - uses -filelist for speed
+			ImportAndCompileMapRefs( s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_new_refs.txt", s2addon, errorCallback )
+
+			print("Re-importing VMF to update with compiled assets...")
+			# Quick import vmf again (taking dependencies into account now that materials in particular have been imported/compiled) 
+			utl.RunCommand( mapImportCmd, errorCallback )
+		else:
+			print(f"No refs file found, skipping prefab dependency processing")
+
+	# Move all .vmap files (main map only) to maps subfolder
+	# This must happen AFTER the final re-import so we move the updated VMAP
+	maps_dir = s2contentcsgo + "\\maps"
+	os.makedirs(maps_dir, exist_ok=True)
+
+	# Import shutil and glob
+	import shutil
+	import glob
+
+	# Find all vmap files in the addon content root (not in subdirectories)
+	vmap_pattern = s2contentcsgoimported + "\\*.vmap"
+	vmap_files = glob.glob(vmap_pattern)
+
+	print(f"Found {len(vmap_files)} VMAP files to move to maps folder")
+
+	# Move all vmap files to maps folder
+	for vmap_file in vmap_files:
+		filename = os.path.basename(vmap_file)
+		destfile = os.path.join(maps_dir, filename)
+		
+		# If destination exists, remove it first
+		if os.path.exists(destfile):
+			os.remove(destfile)
+		
+		# Move the file
+		shutil.move(vmap_file, destfile)
+		print(f"  -> Moved {filename}")
+
+	# Move prefabs folder to maps\prefabs\ if it exists
+	# Prefabs should be in maps\prefabs\MAPNAME\ not just prefabs\MAPNAME\
+	prefabs_root = s2contentcsgoimported + "\\prefabs"
+	if os.path.exists(prefabs_root):
+		maps_prefabs_dir = s2contentcsgo + "\\maps\\prefabs"
+		os.makedirs(maps_prefabs_dir, exist_ok=True)
+		
+		# Move the entire prefabs folder to maps\prefabs\
+		dest_prefabs = os.path.join(maps_prefabs_dir, mapname)
+		
+		# If destination exists, remove it first
+		if os.path.exists(dest_prefabs):
+			import shutil
+			shutil.rmtree(dest_prefabs)
+		
+		# Move prefabs\MAPNAME to maps\prefabs\MAPNAME
+		src_prefabs = os.path.join(prefabs_root, mapname)
+		if os.path.exists(src_prefabs):
+			shutil.move(src_prefabs, dest_prefabs)
+			print(f"Moved prefabs folder to maps\\prefabs\\{mapname}")
+
+	# Check for prefab VMAP files
+	prefabs_dir = s2contentcsgoimported + "\\maps\\prefabs\\" + mapname
+	if os.path.exists(prefabs_dir):
+		prefab_vmaps = glob.glob(prefabs_dir + "\\*.vmap")
+		if prefab_vmaps:
+			print(f"\nFound {len(prefab_vmaps)} prefab VMAP file(s) - ready to use in Hammer:")
+			for prefab_vmap in prefab_vmaps:
+				print(f"  -> {os.path.basename(prefab_vmap)}")
+			print("\nNote: Prefabs are loaded directly as VMAP files in Hammer - no compilation needed")
+		else:
+			print(f"No prefab VMAP files found in {prefabs_dir}")
+	else:
+		print(f"No prefabs directory found")
+
+	print("\nImport complete! Map and prefab VMAP files are ready to use in Hammer")
+
+finally:
+	#
+	# FINISH
+	#
+	
+	# Restore VPK signature checking
+	RestoreVPKSignatures(vpk_sig_path, vpk_sig_old)
+
+# restore VALVE_NO_AUTO_P4 environment var
+utl.RestoreEnv()
+
+#
+end = time.time()
+
+elapsedTime = end - start
+
+utl.print_I( "import_map.py " + s1gamecsgo + " " + s1contentcsgo + " " + s2gamecsgo + " " + mapname + " " + "%s" %(" -usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "")+ "%s" %(" -skipdeps" if skipdeps == True else "") )
+utl.print_I( "Elapsed time: " + utl.GetElapsedTime( elapsedTime ) )

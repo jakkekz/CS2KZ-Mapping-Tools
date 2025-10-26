@@ -239,7 +239,10 @@ def setup_metamod_content_path(path: str):
 
 def load_versions(cs2_dir: str):
     """Load version information from temp file."""
-    version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
+    temp_dir = os.getenv('TEMP')
+    app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+    os.makedirs(app_dir, exist_ok=True)
+    version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
     versions = {}
     if os.path.exists(version_file):
         with open(version_file, 'r') as f:
@@ -251,14 +254,19 @@ def load_versions(cs2_dir: str):
 
 def save_versions(cs2_dir: str, versions: dict):
     """Save version information to temp file."""
-    version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
+    temp_dir = os.getenv('TEMP')
+    app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+    os.makedirs(app_dir, exist_ok=True)
+    version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
     with open(version_file, 'w') as f:
         for key, value in versions.items():
             f.write(f"{key}={value}\n")
 
 def check_setup_needed(cs2_dir: str, check_metamod=True, check_cs2kz=True):
     """Check if setup or updates are needed."""
-    version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
+    temp_dir = os.getenv('TEMP')
+    app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+    version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
     print(f"Checking versions at: {version_file}")
     
     metamod_path = os.path.join(cs2_dir, 'game', 'csgo', 'addons', 'metamod')

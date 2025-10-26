@@ -4,7 +4,9 @@ import sys
 import glob
 import time 
 import textwrap
-import numpy as np 
+import numpy as np
+import tkinter as tk
+from tkinter import messagebox 
 
 # --- PyInstaller Hook for vtf2img ---
 # This block ensures native dependencies for vtf2img (like py_vtf) are loaded
@@ -320,7 +322,7 @@ def find_cubemap_files(directory="."):
         'down': ['down', 'dn'],    
     }
     REQUIRED_FACES = set(FACE_KEYWORDS.keys())
-    IMAGE_EXTENSIONS = ('.vtf', '.png', '.jpg', '.jpeg', '.tga', '.hdr', '.exr') 
+    IMAGE_EXTENSIONS = ('.vtf', '.png', '.jpg', '.jpeg', '.tga', '.exr') 
     VMT_EXTENSION = ('.vmt',)
     ALL_EXTENSIONS = IMAGE_EXTENSIONS + VMT_EXTENSION
 
@@ -422,7 +424,7 @@ def generate_vmat_content_and_save(vmat_path, content, material_type):
 
 def create_vmat_file_optionally(skybox_vmat_path, moondome_vmat_path, sky_texture_path):
     """
-    Asks the user which VMAT files they want to create using Y/N prompts, with spacing.
+    Asks the user which VMAT files they want to create using popup windows.
     Now requires the sky_texture_path to generate content dynamically.
     """
     print("\n" + "=" * 50)
@@ -431,32 +433,47 @@ def create_vmat_file_optionally(skybox_vmat_path, moondome_vmat_path, sky_textur
     
     saved_count = 0
     
+    # Initialize tkinter root window (hidden)
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    
     # Generate content with the resolved path
     ldr_content = get_ldr_vmat_content(sky_texture_path)
     moondome_content = get_moondome_vmat_content(sky_texture_path)
 
     # --- 1. Skybox VMAT Prompt ---
     try:
-        choice_skybox = input("Do you want to create a Skybox Material? (Y/N): ").strip().lower()
-        if choice_skybox in ['yes', 'y']:
+        choice_skybox = messagebox.askyesno(
+            "Skybox Material", 
+            "Do you want to create a Skybox Material?\n\n(Uses standard sky.vfx shader)",
+            parent=root
+        )
+        if choice_skybox:
             generate_vmat_content_and_save(skybox_vmat_path, ldr_content, "Skybox")
             saved_count += 1
         else:
             print("Skybox VMAT creation skipped.")
-    except Exception:
-        print("Skybox VMAT creation skipped due to input error.")
+    except Exception as e:
+        print(f"Skybox VMAT creation skipped due to error: {e}")
 
     # --- 2. Moondome VMAT Prompt ---
-    print("") # Added blank line for spacing
     try:
-        choice_moondome = input("Do you want to create a Moondome Material? (Y/N): ").strip().lower()
-        if choice_moondome in ['yes', 'y']:
+        choice_moondome = messagebox.askyesno(
+            "Moondome Material", 
+            "Do you want to create a Moondome Material?\n\n(Uses csgo_moondome.vfx shader)",
+            parent=root
+        )
+        if choice_moondome:
             generate_vmat_content_and_save(moondome_vmat_path, moondome_content, "Moondome")
             saved_count += 1
         else:
             print("Moondome VMAT creation skipped.")
-    except Exception:
-        print("Moondome VMAT creation skipped due to input error.")
+    except Exception as e:
+        print(f"Moondome VMAT creation skipped due to error: {e}")
+    
+    # Clean up tkinter root
+    root.destroy()
         
     print("-" * 50)
     if saved_count > 0:
@@ -473,7 +490,7 @@ def clean_up_source_files(filenames_map, directory):
     """
     files_to_delete = []
     
-    IMAGE_SOURCE_EXTENSIONS = ('.vtf', '.png', '.jpg', '.jpeg', '.tga', '.hdr', '.exr') 
+    IMAGE_SOURCE_EXTENSIONS = ('.vtf', '.png', '.jpg', '.jpeg', '.tga', '.exr') 
 
     for face, path in filenames_map.items():
         path_lower = path.lower()
@@ -504,16 +521,30 @@ def clean_up_source_files(filenames_map, directory):
         print(f" - {os.path.basename(f)}")
 
     try:
-        # --- Prompt with NEW wording and NO colors ---
-        choice = input(
-            f"Do you want to remove source materials listed above? "
-            f"(Y/N): "
-        ).strip().lower()
-    except Exception:
-        print("\nCleanup skipped: Non-interactive session detected or input error.")
+        # Initialize tkinter root window (hidden)
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        
+        # Build file list for message
+        file_list = "\n".join([f"• {os.path.basename(f)}" for f in files_to_delete[:10]])
+        if len(files_to_delete) > 10:
+            file_list += f"\n... and {len(files_to_delete) - 10} more"
+        
+        # Show popup dialog
+        choice = messagebox.askyesno(
+            "Delete Source Materials",
+            f"Do you want to remove the source materials?\n\n{file_list}",
+            parent=root
+        )
+        
+        root.destroy()
+        
+    except Exception as e:
+        print(f"\nCleanup skipped: Error showing dialog - {e}")
         return
 
-    if choice in ['yes', 'y']:
+    if choice:
         deleted_count = 0
         for f in files_to_delete:
             try:

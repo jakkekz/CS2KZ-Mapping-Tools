@@ -93,8 +93,101 @@ def backup_files(path):
     return gameinfo_path, backup_path, core_gameinfo_path, core_backup_path
 
 def restore_files(backup_path, gameinfo_path, core_backup_path, core_gameinfo_path):
-    shutil.move(backup_path, gameinfo_path)
-    shutil.move(core_backup_path, core_gameinfo_path)
+    if os.path.exists(backup_path):
+        shutil.move(backup_path, gameinfo_path)
+    if os.path.exists(core_backup_path):
+        shutil.move(core_backup_path, core_gameinfo_path)
+
+def enable_particle_editor(path):
+    """Enable particle editor by modifying sdkenginetools.txt and assettypes_common.txt"""
+    print("Enabling particle editor...")
+    
+    # Path to sdkenginetools.txt
+    sdkenginetools_path = os.path.join(path, 'game', 'bin', 'sdkenginetools.txt')
+    # Path to assettypes_common.txt
+    assettypes_path = os.path.join(path, 'game', 'bin', 'assettypes_common.txt')
+    
+    # Modify sdkenginetools.txt - comment out m_ExcludeFromMods for pet
+    try:
+        with open(sdkenginetools_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Find the pet section and comment out m_ExcludeFromMods
+        # Pattern to match the m_ExcludeFromMods section in pet tool
+        import re
+        # This pattern finds m_ExcludeFromMods = [...] within the pet tool definition
+        pattern = r'(\{[^}]*m_Name = "pet"[^}]*?)(m_ExcludeFromMods\s*=\s*\[[^\]]*\])'
+        
+        def comment_exclude(match):
+            before = match.group(1)
+            exclude_section = match.group(2)
+            # Comment out each line in the exclude section
+            commented = '\n'.join('//' + line if line.strip() else line 
+                                 for line in exclude_section.split('\n'))
+            return before + commented
+        
+        content = re.sub(pattern, comment_exclude, content, flags=re.DOTALL)
+        
+        with open(sdkenginetools_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"✓ Modified {sdkenginetools_path}")
+    except Exception as e:
+        print(f"✗ Error modifying sdkenginetools.txt: {e}")
+    
+    # Modify assettypes_common.txt - comment out m_HideForRetailMods for particle_asset
+    try:
+        with open(assettypes_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Pattern to match m_HideForRetailMods section in particle_asset
+        pattern = r'(particle_asset\s*=[^}]*?)(m_HideForRetailMods\s*=\s*\[[^\]]*\])'
+        
+        def comment_hide(match):
+            before = match.group(1)
+            hide_section = match.group(2)
+            # Comment out each line in the hide section
+            commented = '\n'.join('//' + line if line.strip() else line 
+                                 for line in hide_section.split('\n'))
+            return before + commented
+        
+        content = re.sub(pattern, comment_hide, content, flags=re.DOTALL)
+        
+        with open(assettypes_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print(f"✓ Modified {assettypes_path}")
+    except Exception as e:
+        print(f"✗ Error modifying assettypes_common.txt: {e}")
+    
+    print("Particle editor enabled!")
+
+def restore_particle_editor_files(path):
+    """Restore original sdkenginetools.txt and assettypes_common.txt from GitHub"""
+    print("Restoring particle editor files...")
+    
+    BASE_URL = 'https://raw.githubusercontent.com/SteamDatabase/GameTracking-CS2/refs/heads/master/'
+    FILE_PATHS = ['game/bin/sdkenginetools.txt', 'game/bin/assettypes_common.txt']
+    
+    for file_path in FILE_PATHS:
+        url = BASE_URL + file_path
+        print(f'Downloading {url}...')
+        try:
+            file = urllib.request.urlopen(url)
+            if file.getcode() != 200:
+                print(f'Failed to download {url}. ({file.getcode()})')
+                continue
+
+            content = file.read().decode('utf-8').replace('\n', '\r\n')
+            out_path = os.path.join(path, file_path)
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, 'wb') as f:
+                f.write(content.encode('utf-8'))
+            print(f"✓ Restored {file_path}")
+        except Exception as e:
+            print(f"✗ Error restoring {file_path}: {e}")
+    
+    print("Particle editor files restored!")
 
 def get_latest_metamod_version():
     try:
@@ -203,7 +296,10 @@ def setup_metamod_content_path(path: str):
     os.makedirs(os.path.join(path, 'content', 'csgo', 'addons', 'metamod'), exist_ok = True)
 
 def load_versions(cs2_dir: str):
-    version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
+    temp_dir = os.getenv('TEMP')
+    app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+    os.makedirs(app_dir, exist_ok=True)
+    version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
     versions = {}
     if os.path.exists(version_file):
         with open(version_file, 'r') as f:
@@ -214,14 +310,20 @@ def load_versions(cs2_dir: str):
     return versions
 
 def save_versions(cs2_dir: str, versions: dict):
-    version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
+    temp_dir = os.getenv('TEMP')
+    app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+    os.makedirs(app_dir, exist_ok=True)
+    version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
     with open(version_file, 'w') as f:
         for key, value in versions.items():
             f.write(f"{key}={value}\n")
 
 def check_setup_needed(cs2_dir: str, check_metamod=True, check_cs2kz=True):
-    version_file = os.path.join(os.getenv('TEMP'), '.cs2kz_versions.txt')
+    temp_dir = os.getenv('TEMP')
+    app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+    version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
     print(f"Checking versions at: {version_file}")
+
     
     metamod_path = os.path.join(cs2_dir, 'game', 'csgo', 'addons', 'metamod')
     cs2kz_path = os.path.join(cs2_dir, 'game', 'csgo', 'addons', 'cs2kz')
@@ -306,6 +408,9 @@ def verify_gameinfo(path):
         with open(out_path, 'wb') as f:
             f.write(content.encode('utf-8'))
     print('Gameinfo files restored.')
+    
+    # Also restore particle editor files
+    restore_particle_editor_files(path)
 
 if __name__ == '__main__':
     # Parse command-line arguments
@@ -326,6 +431,9 @@ if __name__ == '__main__':
     
     gameinfo_path, backup_path, core_gameinfo_path, core_backup_path = backup_files(path)
     modify_gameinfo(gameinfo_path, core_gameinfo_path)
+    
+    # Enable particle editor
+    enable_particle_editor(path)
     
     cs2_tools_path = os.path.join(path, 'game', 'bin', 'win64')
     print(f"Launching CS2 tools from '{cs2_tools_path}'...")

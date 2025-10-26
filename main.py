@@ -12,6 +12,7 @@ import os
 import sys
 import subprocess
 import psutil
+import shutil
 from scripts.settings_manager import SettingsManager
 
 # Window configuration
@@ -61,7 +62,7 @@ class ImGuiApp:
         self.auto_update_source2viewer = self.settings.get('auto_update_source2viewer', True)
         self.auto_update_metamod = self.settings.get('auto_update_metamod', True)
         self.auto_update_cs2kz = self.settings.get('auto_update_cs2kz', True)
-        self.compact_mode = self.settings.get('compact_mode', False)
+        self.compact_mode = self.settings.get('compact_mode', True)
         appearance = self.settings.get('appearance_mode', 'dark')
         self.dark_mode = appearance == 'dark' or appearance == 'system'
         
@@ -70,6 +71,9 @@ class ImGuiApp:
         
         # Always on top
         self.always_on_top = self.settings.get('always_on_top', False)
+        
+        # Flag to track if window needs resize (deferred until menu closes)
+        self.needs_window_resize = False
         
         # Button icons (texture IDs will be loaded here)
         self.button_icons = {}
@@ -97,7 +101,8 @@ class ImGuiApp:
         self.current_window_height = self.calculate_window_height()
         
         # CS2 detection state
-        self.cs2_running = False
+        self.cs2_client_running = False  # Client (insecure/listen/mapping)
+        self.cs2_dedicated_running = False  # Dedicated server
         
         # Cursor state
         self.current_cursor = None
@@ -113,7 +118,10 @@ class ImGuiApp:
             self.current_cursor = cursor_type
     
     def is_cs2_running(self):
-        """Check if CS2 (or fake_cs2.py for testing) is running"""
+        """Check if CS2 is running and return (client_running, dedicated_running)"""
+        client_running = False
+        dedicated_running = False
+        
         try:
             # Much faster: iterate through all processes only once with minimal attributes
             for proc in psutil.process_iter(['name']):
@@ -123,18 +131,254 @@ class ImGuiApp:
                         name_lower = name.lower()
                         # Check for real cs2.exe
                         if name_lower == 'cs2.exe':
-                            return True
+                            # Check command line to distinguish between client and dedicated server
+                            try:
+                                cmdline = proc.cmdline()
+                                # Dedicated server has -dedicated in command line
+                                if cmdline and any('-dedicated' in arg.lower() for arg in cmdline):
+                                    dedicated_running = True
+                                else:
+                                    client_running = True
+                            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                                # If we can't read cmdline, assume it's a client for safety
+                                client_running = True
                         # Check for python processes (for fake_cs2.py testing)
-                        if 'python' in name_lower:
+                        elif 'python' in name_lower:
                             # Only check cmdline for python processes
                             cmdline = proc.cmdline()
                             if cmdline and any('fake_cs2.py' in arg.lower() for arg in cmdline):
-                                return True
+                                client_running = True
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
         except Exception:
             pass
-        return False
+        
+        return client_running, dedicated_running
+    
+    def clear_settings(self):
+        """Clear saved settings and reset to defaults"""
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        settings_file = os.path.join(app_dir, 'settings.json')
+        
+        try:
+            # Remove the settings file
+            if os.path.exists(settings_file):
+                os.remove(settings_file)
+                print("Settings file removed")
+            
+            # Reset in-memory settings to defaults
+            self.settings.settings = self.settings.default_settings.copy()
+            self.settings.save_settings()
+            
+            # Reset app state to match defaults
+            self.button_visibility = {
+                "dedicated_server": True,
+                "insecure": True,
+                "listen": True,
+                "mapping": True,
+                "source2viewer": True,
+                "cs2importer": True,
+                "skyboxconverter": True,
+                "vtf2png": True,
+                "loading_screen": True,
+                "point_worldtext": True
+            }
+            self.button_order = ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png']
+            self.show_move_icons = False
+            self.auto_update_source2viewer = True
+            self.auto_update_metamod = True
+            self.auto_update_cs2kz = True
+            self.compact_mode = True
+            self.dark_mode = True
+            self.window_opacity = 1.0
+            self.always_on_top = False
+            
+            # Apply visual changes
+            self.setup_style()
+            glfw.set_window_opacity(self.window, self.window_opacity)
+            glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.FALSE)
+            
+            # Recalculate window size
+            new_height = self.calculate_window_height()
+            new_width = self.get_window_width()
+            glfw.set_window_size(self.window, new_width, new_height)
+            self.current_window_height = new_height
+            
+            print("Settings reset to defaults successfully")
+        except Exception as e:
+            print(f"Error clearing settings: {e}")
+    
+    def clear_version_cache(self):
+        """Clear Metamod/CS2KZ version cache"""
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
+        
+        try:
+            if os.path.exists(version_file):
+                os.remove(version_file)
+                print("Version cache cleared successfully")
+            else:
+                print("No version cache found")
+        except Exception as e:
+            print(f"Error clearing version cache: {e}")
+    
+    def clear_pointworldtext_cache(self):
+        """Clear Point Worldtext temporary character images"""
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        
+        # Files to keep (don't delete)
+        keep_files = {'settings.json', 'Source2Viewer.exe', 'ValveResourceFormat.xml'}
+        
+        try:
+            if os.path.exists(app_dir):
+                # Remove all files in the directory except protected files
+                files_removed = 0
+                for filename in os.listdir(app_dir):
+                    if filename not in keep_files:
+                        file_path = os.path.join(app_dir, filename)
+                        try:
+                            if os.path.isfile(file_path):
+                                os.remove(file_path)
+                                files_removed += 1
+                        except Exception as e:
+                            print(f"Error removing {filename}: {e}")
+                print(f"Point Worldtext cache cleared: {files_removed} files removed")
+            else:
+                print("No Point Worldtext cache found")
+        except Exception as e:
+            print(f"Error clearing Point Worldtext cache: {e}")
+    
+    def clear_all_data(self):
+        """Clear all saved data and caches (except Source2Viewer)"""
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        
+        # Files to keep (don't delete)
+        keep_files = {'Source2Viewer.exe', 'ValveResourceFormat.xml'}
+        
+        try:
+            # Remove files from app directory except Source2Viewer
+            if os.path.exists(app_dir):
+                files_removed = 0
+                for filename in os.listdir(app_dir):
+                    if filename not in keep_files:
+                        file_path = os.path.join(app_dir, filename)
+                        try:
+                            if os.path.isfile(file_path):
+                                os.remove(file_path)
+                                files_removed += 1
+                            elif os.path.isdir(file_path):
+                                shutil.rmtree(file_path)
+                                files_removed += 1
+                        except Exception as e:
+                            print(f"Error removing {filename}: {e}")
+                print(f"App data cleared: {files_removed} items removed")
+            
+            print("All data cleared successfully (Source2Viewer preserved)")
+        except Exception as e:
+            print(f"Error clearing all data: {e}")
+    
+    def remove_source2viewer(self):
+        """Remove Source2Viewer from temp directory"""
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        
+        files_to_remove = ['Source2Viewer.exe', 'ValveResourceFormat.xml']
+        
+        try:
+            files_removed = 0
+            for filename in files_to_remove:
+                file_path = os.path.join(app_dir, filename)
+                if os.path.exists(file_path):
+                    try:
+                        os.remove(file_path)
+                        files_removed += 1
+                        print(f"Removed: {filename}")
+                    except Exception as e:
+                        print(f"Error removing {filename}: {e}")
+            
+            if files_removed > 0:
+                print(f"Source2Viewer removed successfully ({files_removed} files)")
+            else:
+                print("Source2Viewer not found")
+        except Exception as e:
+            print(f"Error removing Source2Viewer: {e}")
+    
+    def open_data_folder(self):
+        """Open the data folder in Windows Explorer"""
+        import tempfile
+        import subprocess
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        
+        try:
+            # Create directory if it doesn't exist
+            if not os.path.exists(app_dir):
+                os.makedirs(app_dir, exist_ok=True)
+            
+            # Open in Windows Explorer
+            subprocess.Popen(['explorer', app_dir])
+            print(f"Opened data folder: {app_dir}")
+        except Exception as e:
+            print(f"Error opening data folder: {e}")
+    
+    def get_button_tooltip(self, name):
+        """Get tooltip text for a button"""
+        import tempfile
+        
+        # Load version information for buttons that need it
+        temp_dir = os.getenv('TEMP')
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
+        versions = {}
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, 'r') as f:
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            versions[key] = value
+            except:
+                pass
+        
+        # Get Source2Viewer path
+        s2v_path = os.path.join(app_dir, 'Source2Viewer.exe')
+        
+        tooltips = {
+            "mapping": f"Launches CS2 Hammer Editor with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {versions.get('metamod', 'Not installed')}\nCS2KZ: {versions.get('cs2kz', 'Not installed')}",
+            
+            "listen": f"Launches CS2 with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {versions.get('metamod', 'Not installed')}\nCS2KZ: {versions.get('cs2kz', 'Not installed')}",
+            
+            "dedicated_server": f"Launches a CS2 Dedicated Server with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {versions.get('metamod', 'Not installed')}\nCS2KZ: {versions.get('cs2kz', 'Not installed')}",
+            
+            "insecure": "Launches CS2 in insecure mode.",
+            
+            "source2viewer": (f"Launches Source2Viewer with the latest dev build. (Updates may take some time)\n\nInstalls to: {s2v_path}", True),  # Tuple: (text, has_orange)
+
+            "cs2importer": "Port CS:GO maps to CS2 with the best tool around.\n\nInspired by sarim-hk",
+
+            "skyboxconverter": "Automate the converting of (CS:GO etc...) cubemap skyboxes to a CS2 compatible format.",
+            
+            "loading_screen": "Automate the adding of Loading Screen Images, Map Icons and Descriptions.",
+            
+            "point_worldtext": "Create CS:GO style point_worldtext png images.",
+            
+            "vtf2png": "Convert CS:GO vtf files to png images."
+        }
+        
+        result = tooltips.get(name, "")
+        # Return just the text if it's a tuple, otherwise return as-is
+        if isinstance(result, tuple):
+            return result[0]
+        return result
     
     def calculate_window_height(self):
         """Calculate window height based on number of visible buttons"""
@@ -336,7 +580,7 @@ class ImGuiApp:
             "skyboxconverter": "skybox.ico",
             "vtf2png": "vtf2png.ico",
             "loading_screen": "loading.ico",
-            "point_worldtext": "questionmark.ico",
+            "point_worldtext": "text.ico",
             "title_icon": "hammerkz.ico"  # Icon for title bar
         }
         
@@ -365,7 +609,6 @@ class ImGuiApp:
                                    0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, img_data)
                     
                     self.button_icons[name] = texture
-                    print(f"✓ Loaded icon: {name} ({filename})")
                 except Exception as e:
                     print(f"✗ Error loading icon {filename} for {name}: {e}")
     
@@ -375,8 +618,15 @@ class ImGuiApp:
             return False
         
         # Check if this button should be disabled due to CS2 running
-        cs2_conflict_buttons = ["dedicated_server", "insecure", "listen", "mapping"]
-        is_disabled = self.cs2_running and name in cs2_conflict_buttons
+        # Dedicated server: disabled only when dedicated server is already running
+        # Client buttons (insecure/listen/mapping): disabled when any client is running
+        is_disabled = False
+        if name == "dedicated_server":
+            # Dedicated server is disabled only if another dedicated server is running
+            is_disabled = self.cs2_dedicated_running
+        elif name in ["insecure", "listen", "mapping"]:
+            # Client buttons are disabled if any client is running
+            is_disabled = self.cs2_client_running
         
         clicked = False
         imgui.push_id(name)
@@ -400,6 +650,21 @@ class ImGuiApp:
         # Button with fixed size (matching CustomTkinter)
         button_pressed = imgui.button(f"##{name}", width=button_width, height=button_height)
         is_hovered = imgui.is_item_hovered()
+        
+        # Show tooltip on hover
+        if is_hovered:
+            tooltip_text = self.get_button_tooltip(name)
+            if tooltip_text:
+                # Use window width minus padding for text wrapping
+                tooltip_width = self.get_window_width() - 20  # 10px padding on each side
+                imgui.begin_tooltip()
+                imgui.push_text_wrap_pos(tooltip_width)
+                
+                # Just render normally - no complex color parsing
+                imgui.text(tooltip_text)
+                
+                imgui.pop_text_wrap_pos()
+                imgui.end_tooltip()
         
         # Pop disabled style if applied
         if is_disabled:
@@ -750,45 +1015,52 @@ class ImGuiApp:
                 imgui.end_menu()
             
             # Settings menu
+            window_width = self.get_window_width()
+            menu_width = int(window_width * 0.95)  # Keep menu wider but constrain individual items
+            imgui.push_style_var(imgui.STYLE_ITEM_INNER_SPACING, (0, 4))  # Minimize spacing between text and checkbox in menu items
+            imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (2, 12))  # Reduce window padding to fit content
+            imgui.set_next_window_size(menu_width, 0)
             settings_menu_open = imgui.begin_menu("Settings")
             if imgui.is_item_hovered():
                 self.should_show_hand = True
             if settings_menu_open:
-                clicked_theme = imgui.menu_item("Toggle Theme")[0]
+                # Constrain menu item width to ensure checkboxes fit
+                item_width = min(180, menu_width - 20)
+                imgui.set_next_item_width(item_width)
+                
+                # Dark Mode
+                clicked_theme, new_dark_mode = imgui.menu_item("Dark Mode", None, self.dark_mode)
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
                 if clicked_theme:
-                    self.dark_mode = not self.dark_mode
+                    self.dark_mode = new_dark_mode
                     self.settings.set('appearance_mode', 'dark' if self.dark_mode else 'light')
                     self.setup_style()
                 
                 # Compact Mode
-                clicked, new_state = imgui.menu_item(
+                imgui.set_next_item_width(item_width)
+                clicked_compact, new_compact_mode = imgui.menu_item(
                     "Compact Mode", None, self.compact_mode
                 )
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
-                if clicked:
-                    self.compact_mode = new_state
-                    self.settings.set('compact_mode', new_state)
-                    
-                    # Recalculate and update window size
-                    new_height = self.calculate_window_height()
-                    new_width = self.get_window_width()
-                    if new_height != self.current_window_height or new_width != glfw.get_window_size(self.window)[0]:
-                        self.current_window_height = new_height
-                        glfw.set_window_size(self.window, new_width, new_height)
+                if clicked_compact:
+                    self.compact_mode = new_compact_mode
+                    self.settings.set('compact_mode', self.compact_mode)
+                    # Mark that window needs resize (will happen after menu closes)
+                    self.needs_window_resize = True
                 
                 # Always on Top
-                clicked, new_state = imgui.menu_item(
+                imgui.set_next_item_width(item_width)
+                clicked_top, new_always_on_top = imgui.menu_item(
                     "Always on Top", None, self.always_on_top
                 )
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
-                if clicked:
-                    self.always_on_top = new_state
-                    self.settings.set('always_on_top', new_state)
-                    glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE if new_state else glfw.FALSE)
+                if clicked_top:
+                    self.always_on_top = new_always_on_top
+                    self.settings.set('always_on_top', self.always_on_top)
+                    glfw.set_window_attrib(self.window, glfw.FLOATING, glfw.TRUE if self.always_on_top else glfw.FALSE)
                 
                 # Window Opacity Slider (compact single-line with text on left)
                 imgui.text("Opacity")
@@ -812,6 +1084,7 @@ class ImGuiApp:
                 imgui.separator()
                 
                 # Button-related options
+                imgui.set_next_item_width(item_width)
                 clicked, new_state = imgui.menu_item(
                     "Auto Update Source2Viewer", None, self.auto_update_source2viewer
                 )
@@ -822,6 +1095,7 @@ class ImGuiApp:
                     self.settings.set('auto_update_source2viewer', new_state)
                 
                 # Auto Update Metamod
+                imgui.set_next_item_width(item_width)
                 clicked, new_state = imgui.menu_item(
                     "Auto Update Metamod", None, self.auto_update_metamod
                 )
@@ -832,6 +1106,7 @@ class ImGuiApp:
                     self.settings.set('auto_update_metamod', new_state)
                 
                 # Auto Update CS2KZ
+                imgui.set_next_item_width(item_width)
                 clicked, new_state = imgui.menu_item(
                     "Auto Update CS2KZ", None, self.auto_update_cs2kz
                 )
@@ -841,7 +1116,77 @@ class ImGuiApp:
                     self.auto_update_cs2kz = new_state
                     self.settings.set('auto_update_cs2kz', new_state)
                 
+                # Separator before clear data options
+                imgui.separator()
+                
+                # Data (open folder) - clickable header that opens data folder
+                if imgui.menu_item("Data (open folder)")[0]:
+                    self.open_data_folder()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Open the folder containing\napp data and cache files")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                # Clear Settings
+                if imgui.menu_item("  Clear Settings")[0]:
+                    self.clear_settings()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Remove saved app settings\n(theme, window position, button\nvisibility, etc)")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                # Clear Version Cache
+                if imgui.menu_item("  Clear Version Cache")[0]:
+                    self.clear_version_cache()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Remove saved Metamod/CS2KZ\nversion information\n(forces update check)")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                # Clear Point Worldtext Cache
+                if imgui.menu_item("  Clear Point Worldtext Cache")[0]:
+                    self.clear_pointworldtext_cache()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Remove temporary character\nimages from Point Worldtext tool")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                # Clear All Data
+                if imgui.menu_item("  Clear All Data")[0]:
+                    self.clear_all_data()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Remove all saved data and cache\n(preserves Source2Viewer)")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                # Remove Source2Viewer
+                if imgui.menu_item("  Remove Source2Viewer")[0]:
+                    self.remove_source2viewer()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Remove Source2Viewer executable\nfrom the data folder")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
                 imgui.end_menu()
+            imgui.pop_style_var(2)  # Pop both style variables
             
             # Push About to the right side of the menu bar
             # Calculate available space and add spacing
@@ -903,6 +1248,14 @@ class ImGuiApp:
     
     def render_ui(self):
         """Render the main UI - called every frame"""
+        # Handle deferred window resize (only when not in a menu to avoid layout issues)
+        if self.needs_window_resize and not imgui.is_popup_open("", imgui.POPUP_ANY_POPUP_ID):
+            expected_height = self.calculate_window_height()
+            expected_width = self.get_window_width()
+            self.current_window_height = expected_height
+            glfw.set_window_size(self.window, expected_width, expected_height)
+            self.needs_window_resize = False
+        
         # Render custom title bar first
         self.render_custom_title_bar()
         
@@ -938,7 +1291,7 @@ class ImGuiApp:
             "listen": ("Listen", "listen"),
             "mapping": ("Mapping", "mapping"),
             "source2viewer": ("Source2Viewer", "source2viewer"),
-            "cs2importer": ("CS2Importer", "cs2importer"),
+            "cs2importer": ("CS2 Importer", "cs2importer"),
             "skyboxconverter": ("Skybox\nConverter", "skyboxconverter"),
             "vtf2png": ("VTF to PNG", "vtf2png"),
             "loading_screen": ("Loading\nScreen", "loading_screen"),
@@ -1121,7 +1474,14 @@ class ImGuiApp:
                     print("Enable auto-update in Settings to download it automatically.")
         
         elif button_name == "cs2importer":
-            print("CS2Importer clicked")
+            script_path = os.path.join("scripts", "porting", "cs2importer.py")
+            if os.path.exists(script_path):
+                try:
+                    subprocess.Popen([sys.executable, script_path])
+                except Exception as e:
+                    print(f"Error launching CS2Importer: {e}")
+            else:
+                print(f"CS2Importer script not found at {script_path}")
         
         elif button_name == "skyboxconverter":
             script_path = os.path.join("scripts", "skybox_gui.py")
@@ -1148,7 +1508,12 @@ class ImGuiApp:
                     print(f"Error running creator_gui.py: {e}")
         
         elif button_name == "point_worldtext":
-            print("point_worldtext clicked")
+            script_path = os.path.join("scripts", "pointworldtext.py")
+            if os.path.exists(script_path):
+                try:
+                    subprocess.Popen([sys.executable, script_path])
+                except Exception as e:
+                    print(f"Error running pointworldtext.py: {e}")
     
     def run(self):
         """Main application loop"""
@@ -1169,7 +1534,7 @@ class ImGuiApp:
             # Periodically check if CS2 is running
             current_time = time.time()
             if current_time - last_cs2_check >= cs2_check_interval:
-                self.cs2_running = self.is_cs2_running()
+                self.cs2_client_running, self.cs2_dedicated_running = self.is_cs2_running()
                 last_cs2_check = current_time
             
             # Reset cursor flags at the start of each frame

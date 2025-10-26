@@ -22,14 +22,14 @@ class SettingsManager:
                 'point_worldtext': True,
                 'vtf2png': True
             },
-            'button_order': ['dedicated_server', 'insecure', 'listen', 'mapping', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png'],  # Custom button order
+            'button_order': ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png'],  # Custom button order
             'window_position': None,  # Will store as [x, y]
             'appearance_mode': 'system',  # For CustomTkinter
             'color_theme': 'blue',  # For CustomTkinter
             'source2viewer_path': None,  # Path to Source2Viewer.exe
             'show_move_icons': False,  # Show move icons on buttons
             'auto_update_source2viewer': True,  # Auto update Source2Viewer via S2V-AUL.py
-            'compact_mode': False,  # Slim buttons in single column
+            'compact_mode': True,  # Slim buttons in single column
             'auto_update_metamod': True,  # Auto check and update Metamod
             'auto_update_cs2kz': True  # Auto check and update CS2KZ plugin
         }
