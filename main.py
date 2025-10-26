@@ -363,7 +363,7 @@ class ImGuiApp:
             
             "source2viewer": (f"Launches Source2Viewer with the latest dev build. (Updates may take some time)\n\nInstalls to: {s2v_path}", True),  # Tuple: (text, has_orange)
 
-            "cs2importer": "Port CS:GO maps to CS2 with the best tool around.\n\nInspired by sarim-hk",
+            "cs2importer": "Port CS:GO maps to CS2 with the best tool around.\n\nInspired by:\nsarim-hk\nandreaskeller96",
 
             "skyboxconverter": "Automate the converting of (CS:GO etc...) cubemap skyboxes to a CS2 compatible format.",
             

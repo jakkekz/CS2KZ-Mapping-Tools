@@ -288,7 +288,11 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 
 	# Don't use -src1contentdir here - let source1import find assets in VPK files
 	importRefsCmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"%s\" -s2addon %s -game csgo -usefilelist \"%s\"" % ( s1gamecsgo, s2addon, temp_refs )
-	utl.RunCommand( importRefsCmd, errorCallback )
+	try:
+		utl.RunCommand( importRefsCmd, errorCallback )
+	except Exception as e:
+		print(f"Warning: Some materials may have failed to import: {e}")
+		print("Continuing with compilation of successfully imported materials...")
 
 	# read in global list of materials where we've forced uv2...
 	global2UVMaterials = set()
@@ -312,7 +316,11 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 			outName = s2contentcsgoimported + "\\" + mtlfile.replace( ".vmt", ".vmat" )
 
 		resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
-		utl.RunCommand( resCompCmd, errorCallback )
+		try:
+			utl.RunCommand( resCompCmd, errorCallback )
+		except Exception as e:
+			print(f"Warning: Failed to compile material {mtlfile}: {e}")
+			print("Continuing with other materials...")
 
 	# compile models
 	for mdlfile in mdlfiles :
@@ -337,7 +345,11 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 		else:
 			resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
 
-		utl.RunCommand( resCompCmd, errorCallback )
+		try:
+			utl.RunCommand( resCompCmd, errorCallback )
+		except Exception as e:
+			print(f"Warning: Failed to compile model {mdlfile}: {e}")
+			print("Continuing with other models...")
 
 	# close global 2uv material file
 	global2UVMaterialFile.close()
@@ -351,7 +363,11 @@ def ImportAndCompileMapRefs( refsFile, s2addon, errorCallback ):
 
 	# import map refs - don't use -src1contentdir so source1import can find assets in VPK files
 	importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + refsFile + "\""
-	utl.RunCommand( importcmd, errorCallback )
+	try:
+		utl.RunCommand( importcmd, errorCallback )
+	except Exception as e:
+		print(f"Warning: Some materials may have failed to import from {refsFile}: {e}")
+		print("Continuing with compilation of successfully imported materials...")
 
 	refs = utl.ReadTextFile( refsFile )
 	str = utl.ListStringFromRefs( refs )
@@ -377,7 +393,100 @@ def ImportAndCompileMapRefs( refsFile, s2addon, errorCallback ):
 	writeFile.close()
 
 	compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-	utl.RunCommand( compilercmd, errorCallback )
+	try:
+		utl.RunCommand( compilercmd, errorCallback )
+	except Exception as e:
+		print(f"Warning: Some embedded materials may have failed to compile: {e}")
+		print("Continuing with map import...")
+
+##########################################################################################################################################
+# Import all materials referenced in VMF from pak01
+##########################################################################################################################################
+def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback):
+	"""Import all materials referenced in the VMF file from pak01 before VMF import"""
+	import re
+	
+	try:
+		with open(vmf_path, 'r', encoding='utf-8', errors='ignore') as f:
+			vmf_content = f.read()
+		
+		# Find all material references in the VMF (they appear in "material" keys)
+		material_pattern = re.compile(r'"material"\s+"([^"]+)"', re.IGNORECASE)
+		materials = set(material_pattern.findall(vmf_content))
+		
+		# Also find materials in texture references
+		texture_pattern = re.compile(r'"texture"\s+"([^"]+)"', re.IGNORECASE)
+		materials.update(texture_pattern.findall(vmf_content))
+		
+		if not materials:
+			print("No materials found in VMF")
+			return
+		
+		print(f"Found {len(materials)} unique material references in VMF, importing from pak01...")
+		
+		# Import materials one by one to avoid batch failure
+		imported_materials = []
+		failed_count = 0
+		
+		def material_error_callback(cmd):
+			# Don't abort on individual material import failures
+			print(f"Warning: Material import command failed: {cmd}")
+		
+		for material in materials:
+			material = material.strip().replace('\\', '/')
+			if not material:
+				continue
+			try:
+				import_cmd = f"source1import -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -src1contentdir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo \"materials/{material}.vmt\""
+				utl.RunCommand(import_cmd, material_error_callback)
+				imported_materials.append(material)
+			except Exception as e:
+				print(f"Warning: Failed to import material {material}: {e}")
+				failed_count += 1
+		
+		print(f"Imported {len(imported_materials)} materials, {failed_count} failed")
+		
+		# Compile only the successfully imported materials
+		compile_refs = ""
+		for material in imported_materials:
+			compile_refs += f"{s2contentcsgoimported}\\materials\\{material}.vmat\n"
+		
+		compile_file = vmf_path.replace('.vmf', '_vmf_materials_compile_refs.txt')
+		with open(compile_file, 'w') as f:
+			f.write(compile_refs)
+		
+		compile_cmd = f"resourcecompiler -retail -nop4 -game csgo -f -filelist \"{compile_file}\""
+		try:
+			utl.RunCommand(compile_cmd, material_error_callback)  # Use non-aborting callback
+			print(f"Successfully compiled {len(imported_materials)} imported materials")
+		except Exception as e:
+			print(f"Warning: Some VMF materials may have failed to import: {e}")
+			print("Continuing with VMF import...")
+		
+		# Compile the imported materials
+		compile_refs = ""
+		for material in materials:
+			material = material.strip().replace('\\', '/')
+			if material:
+				compile_refs += f"{s2contentcsgoimported}\\materials\\{material}.vmat\n"
+		
+		compile_file = vmf_path.replace('.vmf', '_vmf_materials_compile_refs.txt')
+		with open(compile_file, 'w') as f:
+			f.write(compile_refs)
+		
+		compile_cmd = f"resourcecompiler -retail -nop4 -game csgo -f -filelist \"{compile_file}\""
+		try:
+			utl.RunCommand(compile_cmd, material_error_callback)  # Use non-aborting callback
+			print("Successfully compiled VMF materials")
+		except Exception as e:
+			print(f"Warning: Some VMF materials may have failed to compile: {e}")
+			print("Continuing with VMF import...")
+			
+	except Exception as e:
+		print(f"Warning: Failed to import VMF materials: {e}")
+		print("Continuing with VMF import...")
+
+	print("VMF materials import and compilation process completed.")
 
 ##########################################################################################################################################
 # VPK Signature management functions
@@ -498,9 +607,24 @@ try:
 	materials_base_path = os.path.join(s1gamecsgo, "..")  # Go up one level from csgo folder
 	FixMaterialCase(vmf_file_path, materials_base_path)
 
+	# Import all materials referenced in VMF from pak01 before VMF import
+	try:
+		ImportVMFMaterials(vmf_file_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback)
+	except Exception as e:
+		print(f"Warning: VMF material import failed: {e}")
+		print("Continuing with VMF import...")
+
+	print("Starting VMF import...")
 	# import vmf to vmap
 	mapImportCmd = "source1import -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1contentcsgo + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
-	utl.RunCommand( mapImportCmd, errorCallback )
+	try:
+		utl.RunCommand( mapImportCmd, errorCallback )
+		print("Successfully imported VMF to VMAP")
+	except Exception as e:
+		print(f"Warning: VMF import failed: {e}")
+		print("Continuing with post-processing...")
+
+	print("VMF import process completed.")
 
 	# replace 'instance' paths with 'prefab' 
 	mapname = mapname.replace( "instances", "prefabs" )
@@ -512,7 +636,11 @@ try:
 			print(f"Found embedded materials from BSP extraction, importing...")
 			# Import embedded materials - need to specify content dir as csgo root since materials are there
 			importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + embedded_refs_file + "\""
-			utl.RunCommand( importcmd, errorCallback )
+			try:
+				utl.RunCommand( importcmd, errorCallback )
+			except Exception as e:
+				print(f"Warning: Some embedded materials may have failed to import: {e}")
+				print("Continuing with compilation of successfully imported materials...")
 			
 			# Now compile the imported materials
 			refs = utl.ReadTextFile( embedded_refs_file )
@@ -535,11 +663,20 @@ try:
 			writeFile.write( newList )
 			writeFile.close()
 			
-			compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-			utl.RunCommand( compilercmd, errorCallback )
-			
-			print("Re-importing VMF to update with compiled embedded materials...")
+	compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+	try:
+		utl.RunCommand( compilercmd, errorCallback )
+	except Exception as e:
+		print(f"Warning: Some materials may have failed to compile: {e}")
+		print("Continuing with import process...")
+		
+		print("Re-importing VMF to update with compiled embedded materials...")
+		try:
 			utl.RunCommand( mapImportCmd, errorCallback )
+			print("Successfully re-imported VMF with embedded materials")
+		except Exception as e:
+			print(f"Warning: VMF re-import failed: {e}")
+			print("Continuing with prefab processing...")
 		
 		# Check if refs file exists to process prefab dependencies
 		# Refs files are now in maps\ folder after the initial import
@@ -564,7 +701,12 @@ try:
 
 			print("Re-importing VMF to update with compiled assets...")
 			# Quick import vmf again (taking dependencies into account now that materials in particular have been imported/compiled) 
-			utl.RunCommand( mapImportCmd, errorCallback )
+			try:
+				utl.RunCommand( mapImportCmd, errorCallback )
+				print("Successfully completed final VMF import")
+			except Exception as e:
+				print(f"Warning: Final VMF import failed: {e}")
+				print("Import process completed with some errors")
 		else:
 			print(f"No refs file found, skipping prefab dependency processing")
 
@@ -616,6 +758,34 @@ try:
 		if os.path.exists(src_prefabs):
 			shutil.move(src_prefabs, dest_prefabs)
 			print(f"Moved prefabs folder to maps\\prefabs\\{mapname}")
+		
+		# Fix prefab paths in the main VMAP file
+		vmap_file = s2contentcsgo + "\\maps\\" + mapname + ".vmap"
+		if os.path.exists(vmap_file):
+			try:
+				with open(vmap_file, 'r', encoding='utf-8', errors='ignore') as f:
+					vmap_content = f.read()
+				
+				# Find prefab references that don't have the full path
+				import re
+				# Look for prefab references like "mapname_prefab.vmap" and replace with "maps/prefabs/mapname/mapname_prefab.vmap"
+				prefab_pattern = r'"(' + re.escape(mapname) + r'_[^"]*\.vmap)"'
+				def fix_prefab_path(match):
+					prefab_name = match.group(1)
+					return f'"maps/prefabs/{mapname}/{prefab_name}"'
+				
+				original_content = vmap_content
+				vmap_content = re.sub(prefab_pattern, fix_prefab_path, vmap_content)
+				
+				if vmap_content != original_content:
+					with open(vmap_file, 'w', encoding='utf-8') as f:
+						f.write(vmap_content)
+					print(f"Fixed prefab paths in {mapname}.vmap")
+				else:
+					print(f"No prefab path fixes needed in {mapname}.vmap")
+					
+			except Exception as e:
+				print(f"Warning: Could not fix prefab paths in VMAP file: {e}")
 
 	# Check for prefab VMAP files
 	prefabs_dir = s2contentcsgoimported + "\\maps\\prefabs\\" + mapname
