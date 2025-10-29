@@ -13,6 +13,7 @@ import sys
 import subprocess
 import psutil
 import shutil
+import threading
 from scripts.settings_manager import SettingsManager
 
 # Helper function for PyInstaller to find bundled files
@@ -1419,68 +1420,79 @@ class ImGuiApp:
     
     def handle_button_click(self, button_name):
         """Handle button clicks"""
-        python_exe = get_python_executable()
+        def run_script_module(module_path, args=None):
+            """Run a script module in a separate thread"""
+            def run():
+                try:
+                    # Set sys.argv for the script
+                    old_argv = sys.argv.copy()
+                    script_name = os.path.basename(module_path)
+                    sys.argv = [script_name] + (args or [])
+                    
+                    # Execute the script
+                    with open(module_path, 'r', encoding='utf-8') as f:
+                        code = f.read()
+                        exec(code, {'__name__': '__main__', '__file__': module_path})
+                    
+                    # Restore sys.argv
+                    sys.argv = old_argv
+                except Exception as e:
+                    print(f"Error running {module_path}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            thread = threading.Thread(target=run, daemon=True)
+            thread.start()
+        
+        def run_gui_app(app_class):
+            """Run a GUI app in a separate thread"""
+            def run():
+                try:
+                    app = app_class()
+                    app.run()
+                except Exception as e:
+                    print(f"Error running GUI app: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            thread = threading.Thread(target=run, daemon=True)
+            thread.start()
         
         if button_name == "dedicated_server":
+            args = []
+            if not self.auto_update_metamod:
+                args.append('--no-update-metamod')
+            if not self.auto_update_cs2kz:
+                args.append('--no-update-cs2kz')
             script_path = resource_path(os.path.join("scripts", "run-dedicated.py"))
-            if os.path.exists(script_path):
-                try:
-                    # Pass settings as command-line arguments
-                    args = [python_exe, script_path]
-                    if not self.auto_update_metamod:
-                        args.append('--no-update-metamod')
-                    if not self.auto_update_cs2kz:
-                        args.append('--no-update-cs2kz')
-                    subprocess.Popen(args)
-                except Exception as e:
-                    print(f"Error running run-dedicated.py: {e}")
+            run_script_module(script_path, args)
         
         elif button_name == "insecure":
             script_path = resource_path(os.path.join("scripts", "run-insecure.py"))
-            if os.path.exists(script_path):
-                try:
-                    subprocess.Popen([python_exe, script_path])
-                except Exception as e:
-                    print(f"Error running run-insecure.py: {e}")
+            run_script_module(script_path)
         
         elif button_name == "listen":
+            args = []
+            if not self.auto_update_metamod:
+                args.append('--no-update-metamod')
+            if not self.auto_update_cs2kz:
+                args.append('--no-update-cs2kz')
             script_path = resource_path(os.path.join("scripts", "listen.py"))
-            if os.path.exists(script_path):
-                try:
-                    # Pass settings as command-line arguments
-                    args = [python_exe, script_path]
-                    if not self.auto_update_metamod:
-                        args.append('--no-update-metamod')
-                    if not self.auto_update_cs2kz:
-                        args.append('--no-update-cs2kz')
-                    subprocess.Popen(args)
-                except Exception as e:
-                    print(f"Error running listen.py: {e}")
+            run_script_module(script_path, args)
         
         elif button_name == "mapping":
+            args = []
+            if not self.auto_update_metamod:
+                args.append('--no-update-metamod')
+            if not self.auto_update_cs2kz:
+                args.append('--no-update-cs2kz')
             script_path = resource_path(os.path.join("scripts", "mapping.py"))
-            if os.path.exists(script_path):
-                try:
-                    # Pass settings as command-line arguments
-                    args = [python_exe, script_path]
-                    if not self.auto_update_metamod:
-                        args.append('--no-update-metamod')
-                    if not self.auto_update_cs2kz:
-                        args.append('--no-update-cs2kz')
-                    subprocess.Popen(args)
-                except Exception as e:
-                    print(f"Error running mapping.py: {e}")
+            run_script_module(script_path, args)
         
         elif button_name == "source2viewer":
             if self.auto_update_source2viewer:
                 script_path = resource_path(os.path.join("scripts", "S2V-AUL.py"))
-                if os.path.exists(script_path):
-                    try:
-                        subprocess.Popen([python_exe, script_path])
-                    except Exception as e:
-                        print(f"Error running S2V-AUL.py: {e}")
-                else:
-                    print(f"Warning: {script_path} not found in the scripts directory")
+                run_script_module(script_path)
             else:
                 # Launch Source2Viewer.exe directly from temp folder
                 temp_dir = self.settings.temp_dir
@@ -1496,46 +1508,24 @@ class ImGuiApp:
                     print("Enable auto-update in Settings to download it automatically.")
         
         elif button_name == "cs2importer":
-            script_path = resource_path(os.path.join("scripts", "porting", "cs2importer.py"))
-            if os.path.exists(script_path):
-                try:
-                    subprocess.Popen([python_exe, script_path])
-                except Exception as e:
-                    print(f"Error launching CS2Importer: {e}")
-            else:
-                print(f"CS2Importer script not found at {script_path}")
+            from scripts.porting.cs2importer import CS2ImporterApp
+            run_gui_app(CS2ImporterApp)
         
         elif button_name == "skyboxconverter":
             script_path = resource_path(os.path.join("scripts", "skybox_gui.py"))
-            if os.path.exists(script_path):
-                try:
-                    subprocess.Popen([python_exe, script_path])
-                except Exception as e:
-                    print(f"Error running skybox_gui.py: {e}")
+            run_script_module(script_path)
         
         elif button_name == "vtf2png":
             script_path = resource_path(os.path.join("scripts", "vtf2png_gui.py"))
-            if os.path.exists(script_path):
-                try:
-                    subprocess.Popen([python_exe, script_path])
-                except Exception as e:
-                    print(f"Error running vtf2png_gui.py: {e}")
+            run_script_module(script_path)
         
         elif button_name == "loading_screen":
             script_path = resource_path(os.path.join("scripts", "creator_gui.py"))
-            if os.path.exists(script_path):
-                try:
-                    subprocess.Popen([python_exe, script_path])
-                except Exception as e:
-                    print(f"Error running creator_gui.py: {e}")
+            run_script_module(script_path)
         
         elif button_name == "point_worldtext":
             script_path = resource_path(os.path.join("scripts", "pointworldtext.py"))
-            if os.path.exists(script_path):
-                try:
-                    subprocess.Popen([python_exe, script_path])
-                except Exception as e:
-                    print(f"Error running pointworldtext.py: {e}")
+            run_script_module(script_path)
     
     def run(self):
         """Main application loop"""
