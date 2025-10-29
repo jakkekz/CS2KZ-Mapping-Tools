@@ -26,7 +26,26 @@ jobs:
           pip install pyinstaller
 
       - name: Build CS2KZMappingTools.exe (One-File)
-        run: pyinstaller CS2KZMappingTools.spec
+        run: |
+          pyinstaller --onefile ^
+            --name=CS2KZMappingTools ^
+            --icon=icons/icon.ico ^
+            --add-data="icons;icons" ^
+            --add-data="chars;chars" ^
+            --add-data="scripts;scripts" ^
+            --add-data="utils;utils" ^
+            --copy-metadata imgui ^
+            --collect-all imgui ^
+            --collect-all glfw ^
+            --collect-all OpenGL ^
+            --copy-metadata glfw ^
+            --hidden-import=PIL._tkinter_finder ^
+            --hidden-import=vdf ^
+            --hidden-import=psutil ^
+            --hidden-import=requests ^
+            --hidden-import=vtf2img ^
+            --hidden-import=numpy ^
+            main.py
         
       - name: Upload artifact (Single EXE)
         uses: actions/upload-artifact@v4
