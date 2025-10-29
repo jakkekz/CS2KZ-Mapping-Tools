@@ -56,7 +56,7 @@ a = Analysis(
         'ctypes.wintypes',
         '_ctypes',
     ] + imgui_hiddenimports + glfw_hiddenimports + opengl_hiddenimports + collect_submodules('imgui') + collect_submodules('glfw'),
-    hookspath=[],
+    hookspath=['.',],  # Look for hook files in current directory
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
@@ -79,10 +79,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # Disable UPX compression - can cause issues with some modules
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # No console window
+    console=True,  # Enable console for debugging
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

@@ -2,8 +2,9 @@
 # Install with: pip install -r requirements.txt
 
 # GUI Frameworks (Main Window)
-imgui[glfw]==1.4.1
+imgui[glfw]>=2.0.0
 PyOpenGL>=3.1.0
+glfw>=2.7.0
 
 # Image Processing
 Pillow>=10.0.0
