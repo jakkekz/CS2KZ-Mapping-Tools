@@ -509,7 +509,8 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 # Import all materials referenced in VMF from pak01
 ##########################################################################################################################################
 def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback):
-	"""Import all materials referenced in the VMF file from pak01 before VMF import"""
+	"""Import all materials referenced in the VMF file from pak01 before VMF import.
+	Returns a set of successfully imported material paths for deduplication."""
 	import re
 	
 	try:
@@ -526,7 +527,7 @@ def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, err
 		
 		if not materials:
 			print("No materials found in VMF")
-			return
+			return set()
 		
 		print(f"Found {len(materials)} unique material references in VMF, importing from pak01...")
 		
@@ -566,31 +567,16 @@ def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, err
 			utl.RunCommand(compile_cmd, material_error_callback)  # Use non-aborting callback
 			print(f"Successfully compiled {len(imported_materials)} imported materials")
 		except Exception as e:
-			print(f"Warning: Some VMF materials may have failed to import: {e}")
-			print("Continuing with VMF import...")
-		
-		# Compile the imported materials
-		compile_refs = ""
-		for material in materials:
-			material = material.strip().replace('\\', '/')
-			if material:
-				compile_refs += f"{s2contentcsgoimported}\\materials\\{material}.vmat\n"
-		
-		compile_file = vmf_path.replace('.vmf', '_vmf_materials_compile_refs.txt')
-		with open(compile_file, 'w') as f:
-			f.write(compile_refs)
-		
-		compile_cmd = f"resourcecompiler -retail -nop4 -game csgo -f -filelist \"{compile_file}\""
-		try:
-			utl.RunCommand(compile_cmd, material_error_callback)  # Use non-aborting callback
-			print("Successfully compiled VMF materials")
-		except Exception as e:
 			print(f"Warning: Some VMF materials may have failed to compile: {e}")
 			print("Continuing with VMF import...")
+		
+		# Return set of imported material paths for deduplication
+		return set(imported_materials)
 			
 	except Exception as e:
 		print(f"Warning: Failed to import VMF materials: {e}")
 		print("Continuing with VMF import...")
+		return set()
 
 	print("VMF materials import and compilation process completed.")
 
@@ -717,8 +703,9 @@ try:
 	FixMaterialCase(vmf_file_path, materials_base_path)
 
 	# Import all materials referenced in VMF from pak01 before VMF import
+	vmf_imported_materials = set()
 	try:
-		ImportVMFMaterials(vmf_file_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback)
+		vmf_imported_materials = ImportVMFMaterials(vmf_file_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback)
 	except Exception as e:
 		print(f"Warning: VMF material import failed: {e}")
 		print("Continuing with VMF import...")
@@ -749,20 +736,50 @@ try:
 		# Check for embedded materials extracted from BSP
 		embedded_refs_file = s1contentcsgo + "\\" + mapname + "_embedded_refs.txt"
 		if os.path.exists(embedded_refs_file):
-			print(f"Found embedded materials from BSP extraction, importing...")
-			# Import embedded materials - need to specify content dir as csgo root since materials are there
-			importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + embedded_refs_file + "\""
-			try:
-				utl.RunCommand( importcmd, errorCallback )
-			except Exception as e:
-				print(f"Warning: Some embedded materials may have failed to import: {e}")
-				print("Continuing with compilation of successfully imported materials...")
+			print(f"Found embedded materials from BSP extraction, deduplicating and importing...")
 			
-			# Now compile the imported materials
+			# Read the embedded materials list
 			refs = utl.ReadTextFile( embedded_refs_file )
 			str = utl.ListStringFromRefs( refs )
 			flatList = str.split( "\n" )
 			
+			# Filter out materials already imported from VMF references
+			unique_embedded = []
+			duplicate_count = 0
+			for line in flatList:
+				if len(line):
+					# Extract material path from the line (e.g., "materials/badges/0.vmt")
+					material_path = line.strip().replace("materials/", "").replace(".vmt", "")
+					material_path = material_path.replace("\\", "/")
+					
+					# Check if this material was already imported from VMF
+					if material_path not in vmf_imported_materials:
+						unique_embedded.append(line)
+					else:
+						duplicate_count += 1
+			
+			if duplicate_count > 0:
+				print(f"Skipping {duplicate_count} materials already imported from VMF references")
+			
+			if len(unique_embedded) == 0:
+				print("All embedded materials were already imported from VMF, skipping...")
+			else:
+				print(f"Importing {len(unique_embedded)} unique embedded materials...")
+				
+				# Create filtered refs file for import
+				filtered_refs_file = embedded_refs_file.replace("_embedded_refs.txt", "_embedded_unique_refs.txt")
+				with open(filtered_refs_file, 'w') as f:
+					f.write("\n".join(unique_embedded))
+				
+				# Import only unique embedded materials
+				importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + filtered_refs_file + "\""
+				try:
+					utl.RunCommand( importcmd, errorCallback )
+				except Exception as e:
+					print(f"Warning: Some embedded materials may have failed to import: {e}")
+					print("Continuing with compilation of successfully imported materials...")
+			
+			# Now compile the imported materials (all embedded materials including duplicates for reference)
 			newList = ""
 			for line in flatList:
 				if len( line ):

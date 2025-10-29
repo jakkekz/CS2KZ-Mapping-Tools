@@ -846,8 +846,8 @@ viewsettings
         # Content (remove duplicate title since it's in title bar now)
         imgui.spacing()
         
-        # Prerequisites Section
-        prerequisites_opened = imgui.collapsing_header("Prerequisites (Read Before Import!)")[0]
+        # Read Before Import Section
+        prerequisites_opened = imgui.collapsing_header("Read Before Import")[0]
         
         # Dynamically resize window based on prerequisites and console state
         current_height = self.base_window_height
@@ -865,26 +865,31 @@ viewsettings
             glfw.set_window_size(self.window, current_width, current_height)
         
         if prerequisites_opened:
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.8, 0.2, 1.0)  # Yellow text
-            imgui.text_wrapped("Follow these steps BEFORE using the importer:")
-            imgui.pop_style_color()
-            
-            imgui.spacing()
             imgui.push_text_wrap_pos(imgui.get_content_region_available_width())
             
-            # Step 1 - White
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
-            imgui.bullet_text("1. Download a CS:GO (Source 1) BSP file from FKZ database:")
-            imgui.indent()
-            
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.6, 0.6, 1.0)  # Light red for warning
-            imgui.text_wrapped("IMPORTANT: Must be CS:GO format, NOT CS2!")
+            # Known bugs
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.8, 0.2, 1.0)  # Yellow text
+            imgui.text_wrapped("Note: Some known bugs include:")
             imgui.pop_style_color()
+            
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.6, 0.6, 1.0)  # Light red
+            imgui.bullet_text("Doesnt port toolsskybox")
+            imgui.bullet_text("Might be a bit slower than the valve script")
             imgui.pop_style_color()
             
             imgui.spacing()
+            imgui.separator()
+            imgui.spacing()
             
-            # FKZ link - clickable and copyable
+            # Step 1
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
+            imgui.text_wrapped("1. Download the .bsp")
+            imgui.pop_style_color()
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.8, 0.8, 0.8, 1.0)
+            imgui.text_wrapped("Example from FKZ database:")
+            imgui.pop_style_color()
+            
+            # FKZ link - clickable
             fkz_url = "https://files.femboy.kz/fastdl/csgo/maps/"
             imgui.push_style_color(imgui.COLOR_TEXT, 0.5, 0.8, 1.0, 1.0)
             if imgui.selectable(fkz_url, False)[0]:
@@ -895,51 +900,29 @@ viewsettings
             if imgui.is_item_hovered():
                 imgui.set_mouse_cursor(imgui.MOUSE_CURSOR_HAND)
             
-            imgui.unindent()
-            
-            # Step 2 - Grey
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Light grey
-            imgui.bullet_text("2. Add CS2 win64 folder to PATH:")
-            imgui.text_wrapped("Required: CS2\\game\\bin\\win64\\ folder must be in PATH")
-            imgui.pop_style_color()
-            imgui.indent()
             imgui.spacing()
             
-            # Buttons for PATH setup
-            if imgui.button("Open win64 Folder", width=140):
-                if self.csgo_basefolder:
-                    win64_path = os.path.join(self.csgo_basefolder, 'game', 'bin', 'win64')
-                    if os.path.exists(win64_path):
-                        subprocess.Popen(f'explorer "{win64_path}"')
-                    else:
-                        self.log("Error: win64 folder not found")
-                else:
-                    self.log("Error: CS2 path not detected")
-            
-            imgui.same_line()
-            
-            if imgui.button("Open PATH Settings", width=140):
-                # Open Windows Environment Variables dialog
-                subprocess.Popen('rundll32.exe sysdm.cpl,EditEnvironmentVariables')
-            
-            imgui.spacing()
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Light grey
-            imgui.text_wrapped('In "User variables" window -> click "Path" -> "Edit..." -> "New"')
-            imgui.text_wrapped('-> Copy-paste the whole win64 path -> click "OK"')
-            imgui.pop_style_color()
-            
-            imgui.unindent()
-            
-            # Step 3 - White
+            # Step 2
             imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
-            imgui.bullet_text("3. Now select a BSP file below to auto-extract and import")
+            imgui.text_wrapped("2. Select the .bsp (stuff will decompile)")
+            imgui.pop_style_color()
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.8, 0.8, 0.8, 1.0)
+            imgui.bullet_text("IF your map has displacements go ahead and open the .vmf in CSGO hammer and save it")
+            imgui.bullet_text("The .vmf is decompiled to \"csgo/maps\"")
             imgui.pop_style_color()
             
             imgui.spacing()
             
-            # Note about automated process
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.8, 0.2, 1.0)  # Yellow
-            imgui.text_wrapped("The importer will automatically extract the BSP with all assets")
+            # Step 3
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
+            imgui.text_wrapped("3. Choose a new Addon Name")
+            imgui.pop_style_color()
+            
+            imgui.spacing()
+            
+            # Step 4
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
+            imgui.text_wrapped("4. GO!")
             imgui.pop_style_color()
             
             imgui.pop_text_wrap_pos()
