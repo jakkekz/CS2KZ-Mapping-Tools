@@ -84,6 +84,19 @@ class CS2ImporterApp:
         self.console_output.append(str(message))
         print(message)  # Also print to actual console
     
+    def copy_to_clipboard(self, text):
+        """Copy text to clipboard using tkinter"""
+        try:
+            root = tk.Tk()
+            root.withdraw()  # Hide the window
+            root.clipboard_clear()
+            root.clipboard_append(text)
+            root.update()  # Required to make clipboard persist
+            root.destroy()
+            self.log("✓ Console output copied to clipboard")
+        except Exception as e:
+            self.log(f"Error copying to clipboard: {e}")
+    
     def init_window(self):
         """Initialize GLFW window and ImGui"""
         if not glfw.init():
@@ -432,6 +445,40 @@ viewsettings
                         if os.path.isfile(src):
                             shutil.copy2(src, dst)
                             self.log(f"Copied {item} to csgo/maps/")
+                
+                # Move models folder contents (embedded custom models)
+                temp_models = os.path.join(extracted_folder, "models") if os.path.exists(extracted_folder) else os.path.join(temp_output_dir, "models")
+                if os.path.exists(temp_models):
+                    self.log("Extracting embedded models...")
+                    csgo_models = os.path.join(csgo_dir, "models")
+                    os.makedirs(csgo_models, exist_ok=True)
+                    
+                    # Also create models folder in content directory (maps/)
+                    csgo_maps_models = os.path.join(csgo_maps, "models")
+                    os.makedirs(csgo_maps_models, exist_ok=True)
+                    
+                    model_count = 0
+                    for root, dirs, files in os.walk(temp_models):
+                        rel_path = os.path.relpath(root, temp_models)
+                        dst_dir_game = os.path.join(csgo_models, rel_path) if rel_path != "." else csgo_models
+                        dst_dir_content = os.path.join(csgo_maps_models, rel_path) if rel_path != "." else csgo_maps_models
+                        os.makedirs(dst_dir_game, exist_ok=True)
+                        os.makedirs(dst_dir_content, exist_ok=True)
+                        for file in files:
+                            src = os.path.join(root, file)
+                            # Copy to both game and content directories
+                            dst_game = os.path.join(dst_dir_game, file)
+                            dst_content = os.path.join(dst_dir_content, file)
+                            shutil.copy2(src, dst_game)
+                            shutil.copy2(src, dst_content)
+                            model_count += 1
+                            # Log relative path to show model structure
+                            rel_file = os.path.join(rel_path, file) if rel_path != "." else file
+                            self.log(f"  Copied model: {rel_file}")
+                    
+                    self.log(f"✓ Extracted {model_count} model files")
+                else:
+                    self.log("⚠ No embedded models found in BSP")
                 
                 # Move materials folder contents  
                 # Copy to BOTH game dir (csgo/materials/) AND content dir (csgo/maps/materials/)
@@ -946,6 +993,20 @@ viewsettings
             self.go()
         
         imgui.pop_style_color(3)
+        
+        # Copy All button (only show after import is completed)
+        if self.import_completed:
+            imgui.same_line()
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.5, 0.8, 1.0)  # Blue
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.6, 0.9, 1.0)  # Lighter blue
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.4, 0.7, 1.0)  # Darker blue
+            
+            if imgui.button("Copy All", width=100, height=40):
+                # Copy console output to clipboard
+                console_text = "\n".join(self.console_output)
+                self.copy_to_clipboard(console_text)
+            
+            imgui.pop_style_color(3)
         
         # Note about window freezing
         if not self.import_in_progress and not self.import_completed:

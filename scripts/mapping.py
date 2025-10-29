@@ -249,6 +249,33 @@ def get_mapping_api_hash():
         pass
     return None
 
+def update_cs2kz_timelimit(cs2_dir: str):
+    """Update defaultTimeLimit to 1440.0 (24 hours) in cs2kz-server-config.txt"""
+    config_path = os.path.join(cs2_dir, "game", "csgo", "cfg", "cs2kz-server-config.txt")
+    
+    if not os.path.exists(config_path):
+        print(f"Warning: CS2KZ config not found at {config_path}")
+        return
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Replace defaultTimeLimit value from 60.0 to 1440.0
+        import re
+        pattern = r'("defaultTimeLimit"\s+)"60\.0"'
+        replacement = r'\g<1>"1440.0"'
+        new_content = re.sub(pattern, replacement, content)
+        
+        if new_content != content:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+            print(f"✓ Updated defaultTimeLimit to 1440.0 (24 hours) in cs2kz-server-config.txt")
+        else:
+            print(f"✓ defaultTimeLimit already set correctly in cs2kz-server-config.txt")
+    except Exception as e:
+        print(f"Warning: Failed to update CS2KZ time limit: {e}")
+
 def download_cs2kz(cs2_dir: str):
     print(f"Downloading CS2KZ plugin...")
     response = requests.get("https://api.github.com/repos/KZGlobalTeam/cs2kz-metamod/releases/latest")
@@ -275,6 +302,9 @@ def download_cs2kz(cs2_dir: str):
                     zip_ref.extractall(path)
                 print(f"CS2KZ unzipped to '{path}'")
             os.remove(asset["name"])
+            
+            # Update defaultTimeLimit after extraction
+            update_cs2kz_timelimit(cs2_dir)
             break
 
     print(f"Downloading mapping API FGD...")
@@ -360,6 +390,9 @@ def run_setup(cs2_dir: str, update_metamod=True, update_cs2kz=True):
         download_cs2kz(cs2_dir)
     else:
         print("Skipping CS2KZ update (disabled in settings)")
+    
+    # Always update CS2KZ time limit configuration
+    update_cs2kz_timelimit(cs2_dir)
     
     try:
         setup_asset_bin(cs2_dir)

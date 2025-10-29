@@ -400,6 +400,112 @@ def ImportAndCompileMapRefs( refsFile, s2addon, errorCallback ):
 		print("Continuing with map import...")
 
 ##########################################################################################################################################
+# Import all models referenced in VMF from pak01
+##########################################################################################################################################
+def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback):
+	"""Import all models referenced in the VMF file from pak01 before VMF import"""
+	import re
+	
+	# Define a non-aborting error callback for model imports
+	def non_aborting_callback(cmd):
+		print(f"Warning: Command failed but continuing: {cmd}")
+	
+	try:
+		with open(vmf_path, 'r', encoding='utf-8', errors='ignore') as f:
+			vmf_content = f.read()
+		
+		# Find all model references in the VMF (they appear in "model" keys for prop_static, etc.)
+		model_pattern = re.compile(r'"model"\s+"([^"]+\.mdl)"', re.IGNORECASE)
+		models = set(model_pattern.findall(vmf_content))
+		
+		if not models:
+			print("No models found in VMF")
+			return
+		
+		print(f"Found {len(models)} unique model references in VMF, importing from pak01...")
+		
+		# Import models one by one to avoid batch failure
+		imported_models = []
+		failed_count = 0
+		model_materials = set()
+		
+		for model in models:
+			model = model.strip().replace('\\', '/')
+			if not model:
+				continue
+			try:
+				# Use cs_mdl_import to import the model from pak01
+				import_cmd = f"cs_mdl_import -nop4 -i \"{s1gamecsgo}\" -o \"{s2contentcsgoimported}\" \"{model}\""
+				utl.RunCommand(import_cmd, non_aborting_callback)
+				imported_models.append(model)
+				
+				# Check if a _refs.txt file was created for this model
+				refs_name = s2contentcsgoimported + "\\" + model.replace(".mdl", "_refs.txt").replace("/", "\\")
+				if os.path.exists(refs_name):
+					refs = utl.ReadTextFile(refs_name)
+					str_refs = utl.ListStringFromRefs(refs)
+					mtllist = str_refs.split("\n")
+					for mtlname in mtllist:
+						if mtlname.strip():
+							model_materials.add(mtlname.strip())
+			except Exception as e:
+				failed_count += 1
+		
+		print(f"Imported {len(imported_models)} models from pak01, {failed_count} skipped/failed")
+		
+		# Import materials used by the models
+		if model_materials:
+			print(f"Importing {len(model_materials)} materials used by models...")
+			
+			# Create a refs file for model materials
+			model_mtl_refs = utl.RefsStringFromList(list(model_materials))
+			temp_refs = vmf_path.replace(".vmf", "_model_mtl_refs.txt")
+			utl.EnsureFileWritable(temp_refs)
+			fw = open(temp_refs, "w")
+			fw.write(model_mtl_refs)
+			fw.close()
+			
+			# Import model materials from pak01
+			importRefsCmd = f"source1import -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo -usefilelist \"{temp_refs}\""
+			try:
+				utl.RunCommand(importRefsCmd, non_aborting_callback)
+			except Exception as e:
+				print(f"Warning: Some model materials may have failed to import: {e}")
+			
+			# Compile the model materials
+			for mtlfile in model_materials:
+				if mtlfile.startswith("-") or mtlfile == "":
+					continue
+				try:
+					mtlfile = mtlfile.replace("/", "\\")
+					outName = s2contentcsgoimported + "\\" + mtlfile.replace(".vmt", ".vmat")
+					if os.path.exists(outName):
+						resCompCmd = f"resourcecompiler -retail -nop4 -game csgo \"{outName}\""
+						utl.RunCommand(resCompCmd, non_aborting_callback)
+				except Exception as e:
+					pass  # Continue with other materials
+			
+			print(f"Compiled {len(model_materials)} model materials")
+		
+		# Compile the successfully imported models
+		if imported_models:
+			print(f"Compiling {len(imported_models)} imported models...")
+			for model in imported_models:
+				try:
+					vmdl_path = s2contentcsgoimported + "\\" + model.replace(".mdl", ".vmdl").replace("/", "\\")
+					if os.path.exists(vmdl_path):
+						compile_cmd = f"resourcecompiler -retail -nop4 -game csgo \"{vmdl_path}\""
+						utl.RunCommand(compile_cmd, non_aborting_callback)
+				except Exception as e:
+					pass  # Continue with other models
+			
+			print(f"Finished compiling models from pak01")
+		
+	except Exception as e:
+		print(f"Warning: VMF model import failed: {e}")
+		print("Continuing with VMF import...")
+
+##########################################################################################################################################
 # Import all materials referenced in VMF from pak01
 ##########################################################################################################################################
 def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback):
@@ -570,7 +676,10 @@ s2gameaddon = s2gamecsgo.replace( "game\\csgo", s2gameaddondir )
 s2contentcsgo = s2gameaddon.replace( "game\csgo_addons", "content\csgo_addons" )
 s2contentcsgoimported = s2contentcsgo
 
-errorCallback = None
+# Define a non-aborting error callback for all import operations
+# This prevents the script from exiting when individual assets fail to import
+def errorCallback(cmd):
+	print(f"Warning: Command failed but continuing with import: {cmd}")
 
 # Disable VPK signature checking before starting import
 vpk_sig_path, vpk_sig_old = DisableVPKSignatures(s2gamecsgo)
@@ -614,6 +723,13 @@ try:
 		print(f"Warning: VMF material import failed: {e}")
 		print("Continuing with VMF import...")
 
+	# Import all models referenced in VMF from pak01 before VMF import
+	try:
+		ImportVMFModels(vmf_file_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback)
+	except Exception as e:
+		print(f"Warning: VMF model import failed: {e}")
+		print("Continuing with VMF import...")
+
 	print("Starting VMF import...")
 	# import vmf to vmap
 	mapImportCmd = "source1import -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1contentcsgo + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
@@ -654,63 +770,61 @@ try:
 					line = line.replace( " ", "_" )
 					newList += s2contentcsgoimported + "\\" + line.replace( "/", "\\" ) + "\n"
 			
-			tmpFile = s2contentcsgoimported + "\\maps\\" + mapname + "_embedded_compile_refs.txt"
-			maps_dir = os.path.dirname(tmpFile)
-			os.makedirs(maps_dir, exist_ok=True)
-			
-			utl.EnsureFileWritable( tmpFile )
-			writeFile = open( tmpFile, "w" )
-			writeFile.write( newList )
-			writeFile.close()
-			
-	compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-	try:
-		utl.RunCommand( compilercmd, errorCallback )
-	except Exception as e:
-		print(f"Warning: Some materials may have failed to compile: {e}")
-		print("Continuing with import process...")
+		tmpFile = s2contentcsgoimported + "\\maps\\" + mapname + "_embedded_compile_refs.txt"
+		maps_dir = os.path.dirname(tmpFile)
+		os.makedirs(maps_dir, exist_ok=True)
 		
-		print("Re-importing VMF to update with compiled embedded materials...")
+		utl.EnsureFileWritable( tmpFile )
+		writeFile = open( tmpFile, "w" )
+		writeFile.write( newList )
+		writeFile.close()
+		
+		compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+		try:
+			utl.RunCommand( compilercmd, errorCallback )
+		except Exception as e:
+			print(f"Warning: Some embedded materials may have failed to compile: {e}")
+			print("Continuing with import process...")
+		
+	print("Re-importing VMF to update with compiled embedded materials...")
+	try:
+		utl.RunCommand( mapImportCmd, errorCallback )
+		print("Successfully re-imported VMF with embedded materials")
+	except Exception as e:
+		print(f"Warning: VMF re-import failed: {e}")
+		print("Continuing with prefab processing...")
+	
+	# Check if refs file exists to process prefab dependencies
+	# Refs files are now in maps\ folder after the initial import
+	refs_file = s2contentcsgoimported + "\\maps\\" + mapname + "_refs.txt"
+	
+	if os.path.exists(refs_file):
+		print("Processing prefab dependencies...")
+		
+		# Create prefab refs by copying from main refs
+		prefab_refs_file = s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_refs.txt"
+		import shutil
+		shutil.copy(refs_file, prefab_refs_file)
+		
+		# Strip out models as they go through the new importer last
+		StripMDLsFromRefs( prefab_refs_file )
+
+		# Import and compile prefab models and their materials
+		ImportAndCompileMapMDLs( s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_mdl_lst.txt", s2addon, errorCallback )
+
+		# Import and compile prefab refs (excluding mdls) - uses -filelist for speed
+		ImportAndCompileMapRefs( s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_new_refs.txt", s2addon, errorCallback )
+
+		print("Re-importing VMF to update with compiled assets...")
+		# Quick import vmf again (taking dependencies into account now that materials in particular have been imported/compiled) 
 		try:
 			utl.RunCommand( mapImportCmd, errorCallback )
-			print("Successfully re-imported VMF with embedded materials")
+			print("Successfully completed final VMF import")
 		except Exception as e:
-			print(f"Warning: VMF re-import failed: {e}")
-			print("Continuing with prefab processing...")
-		
-		# Check if refs file exists to process prefab dependencies
-		# Refs files are now in maps\ folder after the initial import
-		refs_file = s2contentcsgoimported + "\\maps\\" + mapname + "_refs.txt"
-		
-		if os.path.exists(refs_file):
-			print("Processing prefab dependencies...")
-			
-			# Create prefab refs by copying from main refs
-			prefab_refs_file = s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_refs.txt"
-			import shutil
-			shutil.copy(refs_file, prefab_refs_file)
-			
-			# Strip out models as they go through the new importer last
-			StripMDLsFromRefs( prefab_refs_file )
-
-			# Import and compile prefab models and their materials
-			ImportAndCompileMapMDLs( s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_mdl_lst.txt", s2addon, errorCallback )
-
-			# Import and compile prefab refs (excluding mdls) - uses -filelist for speed
-			ImportAndCompileMapRefs( s2contentcsgoimported + "\\maps\\" + mapname + "_prefab_new_refs.txt", s2addon, errorCallback )
-
-			print("Re-importing VMF to update with compiled assets...")
-			# Quick import vmf again (taking dependencies into account now that materials in particular have been imported/compiled) 
-			try:
-				utl.RunCommand( mapImportCmd, errorCallback )
-				print("Successfully completed final VMF import")
-			except Exception as e:
-				print(f"Warning: Final VMF import failed: {e}")
-				print("Import process completed with some errors")
-		else:
-			print(f"No refs file found, skipping prefab dependency processing")
-
-	# Move all .vmap files (main map only) to maps subfolder
+			print(f"Warning: Final VMF import failed: {e}")
+			print("Import process completed with some errors")
+	else:
+		print(f"No refs file found, skipping prefab dependency processing")	# Move all .vmap files (main map only) to maps subfolder
 	# This must happen AFTER the final re-import so we move the updated VMAP
 	maps_dir = s2contentcsgo + "\\maps"
 	os.makedirs(maps_dir, exist_ok=True)
