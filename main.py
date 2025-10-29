@@ -1445,33 +1445,36 @@ class ImGuiApp:
             thread.start()
         
         def run_gui_executable(exe_name):
-            """Extract and run a bundled GUI executable (for frozen exe)"""
+            """Extract and run a bundled GUI executable folder (onedir format)"""
             try:
                 # Get the temp extraction folder
                 temp_base = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 
                                          'Temp', '.CS2KZ-mapping-tools')
                 os.makedirs(temp_base, exist_ok=True)
                 
-                extracted_exe_path = os.path.join(temp_base, exe_name)
+                # Remove .exe extension to get folder name
+                folder_name = exe_name.replace('.exe', '')
+                extracted_folder = os.path.join(temp_base, folder_name)
+                extracted_exe_path = os.path.join(extracted_folder, exe_name)
                 
                 # If already extracted, just run it
                 if os.path.exists(extracted_exe_path):
                     subprocess.Popen([extracted_exe_path])
                     return
                 
-                # Extract from bundled resources
-                bundled_exe_path = resource_path(os.path.join('gui_tools', exe_name))
+                # Extract from bundled resources (onedir structure)
+                bundled_folder = resource_path(os.path.join('gui_tools', folder_name))
                 
-                if os.path.exists(bundled_exe_path):
-                    # Copy to temp folder
+                if os.path.exists(bundled_folder):
+                    # Copy entire folder to temp location
                     import shutil
-                    shutil.copy2(bundled_exe_path, extracted_exe_path)
-                    print(f"Extracted {exe_name} to {extracted_exe_path}")
+                    shutil.copytree(bundled_folder, extracted_folder, dirs_exist_ok=True)
+                    print(f"Extracted {folder_name} to {extracted_folder}")
                     
                     # Run the extracted executable
                     subprocess.Popen([extracted_exe_path])
                 else:
-                    print(f"Error: {exe_name} not found in bundled resources")
+                    print(f"Error: {folder_name} not found in bundled resources")
                     
             except Exception as e:
                 print(f"Error launching GUI executable {exe_name}: {e}")

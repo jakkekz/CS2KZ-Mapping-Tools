@@ -27,8 +27,8 @@ jobs:
 
       - name: Build GUI tool executables
         run: |
-          # Build CS2Importer
-          pyinstaller --onefile --windowed `
+          # Build CS2Importer (onedir for faster startup)
+          pyinstaller --onedir --windowed `
             --name=CS2Importer `
             --icon=icons/porting.ico `
             --add-data="icons;icons" `
@@ -39,8 +39,8 @@ jobs:
             --hidden-import=vdf `
             scripts/porting/cs2importer.py
           
-          # Build SkyboxConverter
-          pyinstaller --onefile --windowed `
+          # Build SkyboxConverter (onedir for faster startup)
+          pyinstaller --onedir --windowed `
             --name=SkyboxConverter `
             --icon=icons/skybox.ico `
             --hidden-import=PIL.ImageTk `
@@ -49,16 +49,16 @@ jobs:
             --add-data="scripts;scripts" `
             scripts/skybox_gui.py
           
-          # Build VTF2PNG
-          pyinstaller --onefile --windowed `
+          # Build VTF2PNG (onedir for faster startup)
+          pyinstaller --onedir --windowed `
             --name=VTF2PNG `
             --icon=icons/vtf2png.ico `
             --hidden-import=PIL.ImageTk `
             --hidden-import=vtf2img `
             scripts/vtf2png_gui.py
           
-          # Build LoadingScreenCreator
-          pyinstaller --onefile --windowed `
+          # Build LoadingScreenCreator (onedir for faster startup)
+          pyinstaller --onedir --windowed `
             --name=LoadingScreenCreator `
             --icon=icons/loading.ico `
             --add-data="scripts;scripts" `
@@ -68,8 +68,8 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/creator_gui.py
           
-          # Build PointWorldText
-          pyinstaller --onefile --windowed `
+          # Build PointWorldText (onedir for faster startup)
+          pyinstaller --onedir --windowed `
             --name=PointWorldText `
             --icon=icons/text.ico `
             --hidden-import=PIL.ImageTk `
@@ -77,13 +77,13 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/pointworldtext.py
           
-          # Create gui_tools directory and move GUI exes there
+          # Create gui_tools directory and move GUI folders there
           New-Item -ItemType Directory -Force -Path gui_tools
-          Move-Item -Path dist/CS2Importer.exe -Destination gui_tools/
-          Move-Item -Path dist/SkyboxConverter.exe -Destination gui_tools/
-          Move-Item -Path dist/VTF2PNG.exe -Destination gui_tools/
-          Move-Item -Path dist/LoadingScreenCreator.exe -Destination gui_tools/
-          Move-Item -Path dist/PointWorldText.exe -Destination gui_tools/
+          Move-Item -Path dist/CS2Importer -Destination gui_tools/
+          Move-Item -Path dist/SkyboxConverter -Destination gui_tools/
+          Move-Item -Path dist/VTF2PNG -Destination gui_tools/
+          Move-Item -Path dist/LoadingScreenCreator -Destination gui_tools/
+          Move-Item -Path dist/PointWorldText -Destination gui_tools/
 
       - name: Build CS2KZMappingTools.exe (One-File)
         run: |
