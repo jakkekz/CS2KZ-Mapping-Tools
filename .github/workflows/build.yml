@@ -27,7 +27,7 @@ jobs:
 
       - name: Build CS2KZMappingTools.exe (One-File)
         run: |
-          pyinstaller --onefile --windowed `
+          pyinstaller --onefile `
             --name=CS2KZMappingTools `
             --icon=icons/icon.ico `
             --add-data="icons;icons" `
