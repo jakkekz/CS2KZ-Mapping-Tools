@@ -25,6 +25,16 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+def get_python_executable():
+    """Get the correct Python executable to use"""
+    # Check if running as PyInstaller exe
+    if getattr(sys, 'frozen', False):
+        # Running from PyInstaller exe - use python from PATH
+        return 'python'
+    else:
+        # Running from normal Python - use current interpreter
+        return sys.executable
+
 # Window configuration
 WINDOW_WIDTH = 259  # Fixed width for 2 columns: 14 + 112 + 7 + 112 + 14 = 259
 WINDOW_WIDTH_COMPACT = 240  # Width for single column: increased for checkmark space
@@ -1409,12 +1419,14 @@ class ImGuiApp:
     
     def handle_button_click(self, button_name):
         """Handle button clicks"""
+        python_exe = get_python_executable()
+        
         if button_name == "dedicated_server":
             script_path = resource_path(os.path.join("scripts", "run-dedicated.py"))
             if os.path.exists(script_path):
                 try:
                     # Pass settings as command-line arguments
-                    args = [sys.executable, script_path]
+                    args = [python_exe, script_path]
                     if not self.auto_update_metamod:
                         args.append('--no-update-metamod')
                     if not self.auto_update_cs2kz:
@@ -1427,7 +1439,7 @@ class ImGuiApp:
             script_path = resource_path(os.path.join("scripts", "run-insecure.py"))
             if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([sys.executable, script_path])
+                    subprocess.Popen([python_exe, script_path])
                 except Exception as e:
                     print(f"Error running run-insecure.py: {e}")
         
@@ -1436,7 +1448,7 @@ class ImGuiApp:
             if os.path.exists(script_path):
                 try:
                     # Pass settings as command-line arguments
-                    args = [sys.executable, script_path]
+                    args = [python_exe, script_path]
                     if not self.auto_update_metamod:
                         args.append('--no-update-metamod')
                     if not self.auto_update_cs2kz:
@@ -1450,7 +1462,7 @@ class ImGuiApp:
             if os.path.exists(script_path):
                 try:
                     # Pass settings as command-line arguments
-                    args = [sys.executable, script_path]
+                    args = [python_exe, script_path]
                     if not self.auto_update_metamod:
                         args.append('--no-update-metamod')
                     if not self.auto_update_cs2kz:
@@ -1464,7 +1476,7 @@ class ImGuiApp:
                 script_path = resource_path(os.path.join("scripts", "S2V-AUL.py"))
                 if os.path.exists(script_path):
                     try:
-                        subprocess.Popen([sys.executable, script_path])
+                        subprocess.Popen([python_exe, script_path])
                     except Exception as e:
                         print(f"Error running S2V-AUL.py: {e}")
                 else:
@@ -1487,7 +1499,7 @@ class ImGuiApp:
             script_path = resource_path(os.path.join("scripts", "porting", "cs2importer.py"))
             if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([sys.executable, script_path])
+                    subprocess.Popen([python_exe, script_path])
                 except Exception as e:
                     print(f"Error launching CS2Importer: {e}")
             else:
@@ -1497,7 +1509,7 @@ class ImGuiApp:
             script_path = resource_path(os.path.join("scripts", "skybox_gui.py"))
             if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([sys.executable, script_path])
+                    subprocess.Popen([python_exe, script_path])
                 except Exception as e:
                     print(f"Error running skybox_gui.py: {e}")
         
@@ -1505,7 +1517,7 @@ class ImGuiApp:
             script_path = resource_path(os.path.join("scripts", "vtf2png_gui.py"))
             if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([sys.executable, script_path])
+                    subprocess.Popen([python_exe, script_path])
                 except Exception as e:
                     print(f"Error running vtf2png_gui.py: {e}")
         
@@ -1513,7 +1525,7 @@ class ImGuiApp:
             script_path = resource_path(os.path.join("scripts", "creator_gui.py"))
             if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([sys.executable, script_path])
+                    subprocess.Popen([python_exe, script_path])
                 except Exception as e:
                     print(f"Error running creator_gui.py: {e}")
         
@@ -1521,7 +1533,7 @@ class ImGuiApp:
             script_path = resource_path(os.path.join("scripts", "pointworldtext.py"))
             if os.path.exists(script_path):
                 try:
-                    subprocess.Popen([sys.executable, script_path])
+                    subprocess.Popen([python_exe, script_path])
                 except Exception as e:
                     print(f"Error running pointworldtext.py: {e}")
     
