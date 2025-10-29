@@ -1,7 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all, collect_submodules
+import os
+import sys
+import site
 
 block_cipher = None
+
+# Compute pathex including project root and any site-packages entries so PyInstaller
+# can find installed packages like imgui when building in CI environments.
+site_paths = []
+try:
+    site_paths = site.getsitepackages()
+except Exception:
+    # Fallback: include any sys.path entries that look like site-packages
+    site_paths = [p for p in sys.path if 'site-packages' in (p or '')]
+pathex = [os.path.abspath('.')] + site_paths
 
 # Collect all imgui, glfw, and OpenGL modules
 imgui_datas, imgui_binaries, imgui_hiddenimports = collect_all('imgui')
