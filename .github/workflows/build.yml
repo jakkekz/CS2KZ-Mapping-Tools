@@ -25,6 +25,66 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Build GUI tool executables
+        run: |
+          # Build CS2Importer
+          pyinstaller --onefile --windowed `
+            --name=CS2Importer `
+            --icon=icons/porting.ico `
+            --add-data="icons;icons" `
+            --add-data="utils;utils" `
+            --collect-all imgui `
+            --collect-all glfw `
+            --collect-all OpenGL `
+            --hidden-import=vdf `
+            scripts/porting/cs2importer.py
+          
+          # Build SkyboxConverter
+          pyinstaller --onefile --windowed `
+            --name=SkyboxConverter `
+            --icon=icons/skybox.ico `
+            --hidden-import=PIL.ImageTk `
+            --hidden-import=PIL.ImageDraw `
+            --hidden-import=numpy `
+            --add-data="scripts;scripts" `
+            scripts/skybox_gui.py
+          
+          # Build VTF2PNG
+          pyinstaller --onefile --windowed `
+            --name=VTF2PNG `
+            --icon=icons/vtf2png.ico `
+            --hidden-import=PIL.ImageTk `
+            --hidden-import=vtf2img `
+            scripts/vtf2png_gui.py
+          
+          # Build LoadingScreenCreator
+          pyinstaller --onefile --windowed `
+            --name=LoadingScreenCreator `
+            --icon=icons/loading.ico `
+            --add-data="scripts;scripts" `
+            --add-data="chars;chars" `
+            --hidden-import=PIL.ImageTk `
+            --hidden-import=PIL.ImageDraw `
+            --hidden-import=PIL.ImageFont `
+            scripts/creator_gui.py
+          
+          # Build PointWorldText
+          pyinstaller --onefile --windowed `
+            --name=PointWorldText `
+            --icon=icons/text.ico `
+            --hidden-import=PIL.ImageTk `
+            --hidden-import=PIL.ImageDraw `
+            --hidden-import=PIL.ImageFont `
+            scripts/pointworldtext.py
+          
+          # Create gui_tools directory and move GUI exes there
+          New-Item -ItemType Directory -Force -Path gui_tools
+          Move-Item -Path dist/CS2Importer.exe -Destination gui_tools/
+          Move-Item -Path dist/SkyboxConverter.exe -Destination gui_tools/
+          Move-Item -Path dist/VTF2PNG.exe -Destination gui_tools/
+          Move-Item -Path dist/LoadingScreenCreator.exe -Destination gui_tools/
+          Move-Item -Path dist/PointWorldText.exe -Destination gui_tools/
+
       - name: Build CS2KZMappingTools.exe (One-File)
         run: |
           pyinstaller --onefile `
@@ -34,15 +94,22 @@ jobs:
             --add-data="chars;chars" `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
+            --add-data="gui_tools;gui_tools" `
             --collect-all imgui `
             --collect-all glfw `
             --collect-all OpenGL `
+            --collect-all PIL `
             --hidden-import=PIL._tkinter_finder `
+            --hidden-import=PIL.ImageDraw `
+            --hidden-import=PIL.ImageFont `
+            --hidden-import=PIL.ImageTk `
             --hidden-import=vdf `
             --hidden-import=psutil `
             --hidden-import=requests `
             --hidden-import=vtf2img `
             --hidden-import=numpy `
+            --hidden-import=scripts.creator `
+            --hidden-import=scripts.SkyboxConverter `
             main.py
         
       - name: Upload artifact (Single EXE)

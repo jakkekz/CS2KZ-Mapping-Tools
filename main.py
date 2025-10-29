@@ -1421,7 +1421,7 @@ class ImGuiApp:
     def handle_button_click(self, button_name):
         """Handle button clicks"""
         def run_script_module(module_path, args=None):
-            """Run a script module in a separate thread"""
+            """Run a script module in a separate thread (for non-GUI scripts)"""
             def run():
                 try:
                     # Set sys.argv for the script
@@ -1444,19 +1444,39 @@ class ImGuiApp:
             thread = threading.Thread(target=run, daemon=True)
             thread.start()
         
-        def run_gui_app(app_class):
-            """Run a GUI app in a separate thread"""
-            def run():
-                try:
-                    app = app_class()
-                    app.run()
-                except Exception as e:
-                    print(f"Error running GUI app: {e}")
-                    import traceback
-                    traceback.print_exc()
-            
-            thread = threading.Thread(target=run, daemon=True)
-            thread.start()
+        def run_gui_executable(exe_name):
+            """Extract and run a bundled GUI executable (for frozen exe)"""
+            try:
+                # Get the temp extraction folder
+                temp_base = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 
+                                         'Temp', '.CS2KZ-mapping-tools')
+                os.makedirs(temp_base, exist_ok=True)
+                
+                extracted_exe_path = os.path.join(temp_base, exe_name)
+                
+                # If already extracted, just run it
+                if os.path.exists(extracted_exe_path):
+                    subprocess.Popen([extracted_exe_path])
+                    return
+                
+                # Extract from bundled resources
+                bundled_exe_path = resource_path(os.path.join('gui_tools', exe_name))
+                
+                if os.path.exists(bundled_exe_path):
+                    # Copy to temp folder
+                    import shutil
+                    shutil.copy2(bundled_exe_path, extracted_exe_path)
+                    print(f"Extracted {exe_name} to {extracted_exe_path}")
+                    
+                    # Run the extracted executable
+                    subprocess.Popen([extracted_exe_path])
+                else:
+                    print(f"Error: {exe_name} not found in bundled resources")
+                    
+            except Exception as e:
+                print(f"Error launching GUI executable {exe_name}: {e}")
+                import traceback
+                traceback.print_exc()
         
         if button_name == "dedicated_server":
             args = []
@@ -1508,24 +1528,24 @@ class ImGuiApp:
                     print("Enable auto-update in Settings to download it automatically.")
         
         elif button_name == "cs2importer":
-            from scripts.porting.cs2importer import CS2ImporterApp
-            run_gui_app(CS2ImporterApp)
+            # GUI app - extract and run bundled executable
+            run_gui_executable("CS2Importer.exe")
         
         elif button_name == "skyboxconverter":
-            script_path = resource_path(os.path.join("scripts", "skybox_gui.py"))
-            run_script_module(script_path)
+            # GUI app - extract and run bundled executable
+            run_gui_executable("SkyboxConverter.exe")
         
         elif button_name == "vtf2png":
-            script_path = resource_path(os.path.join("scripts", "vtf2png_gui.py"))
-            run_script_module(script_path)
+            # GUI app - extract and run bundled executable
+            run_gui_executable("VTF2PNG.exe")
         
         elif button_name == "loading_screen":
-            script_path = resource_path(os.path.join("scripts", "creator_gui.py"))
-            run_script_module(script_path)
+            # GUI app - extract and run bundled executable
+            run_gui_executable("LoadingScreenCreator.exe")
         
         elif button_name == "point_worldtext":
-            script_path = resource_path(os.path.join("scripts", "pointworldtext.py"))
-            run_script_module(script_path)
+            # GUI app - extract and run bundled executable
+            run_gui_executable("PointWorldText.exe")
     
     def run(self):
         """Main application loop"""
