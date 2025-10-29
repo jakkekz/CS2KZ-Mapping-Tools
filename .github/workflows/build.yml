@@ -17,7 +17,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -34,11 +34,9 @@ jobs:
             --add-data="chars;chars" `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
-            --copy-metadata imgui `
             --collect-all imgui `
             --collect-all glfw `
             --collect-all OpenGL `
-            --copy-metadata glfw `
             --hidden-import=PIL._tkinter_finder `
             --hidden-import=vdf `
             --hidden-import=psutil `
