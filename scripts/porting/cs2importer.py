@@ -66,9 +66,12 @@ class CS2ImporterApp:
         self.prerequisites_height = 0  # Track prerequisites section height
         
         # Window dimensions
-        self.base_window_height = 300  # Compact base height with room for freeze text
+        self.base_window_height = 310  # Compact base height with room for freeze text
         self.console_height = 640  # Additional height when console is shown
         self.prerequisites_expanded_height = 320  # Reduced height (fewer steps with automation)
+        
+        # Cursor state
+        self.text_input_hovered = False
         
         # Override print for this instance
         self._original_print = print
@@ -111,7 +114,7 @@ class CS2ImporterApp:
         glfw.window_hint(glfw.DECORATED, glfw.FALSE)  # Remove window decorations for custom title bar
         
         # Create window with base height
-        self.window = glfw.create_window(360, self.base_window_height, "CS2 Map Importer", None, None)
+        self.window = glfw.create_window(345, self.base_window_height, "CS2 Map Importer", None, None)
         if not self.window:
             glfw.terminate()
             print("Could not initialize Window")
@@ -127,6 +130,11 @@ class CS2ImporterApp:
         
         glfw.make_context_current(self.window)
         glfw.swap_interval(1)  # Enable vsync
+        
+        # Create cursors for different UI elements
+        self.hand_cursor = glfw.create_standard_cursor(glfw.HAND_CURSOR)
+        self.arrow_cursor = glfw.create_standard_cursor(glfw.ARROW_CURSOR)
+        self.ibeam_cursor = glfw.create_standard_cursor(glfw.IBEAM_CURSOR)
         
         # Setup ImGui
         imgui.create_context()
@@ -851,10 +859,10 @@ viewsettings
         
         # Dynamically resize window based on prerequisites and console state
         current_height = self.base_window_height
-        current_width = 360  # Base width - 20% narrower (was 450)
+        current_width = 275
         if prerequisites_opened:
             current_height += self.prerequisites_expanded_height
-            current_width = 520  # Slightly wider for prerequisites text
+            current_width = 400  # Slightly wider for prerequisites text
         if self.import_completed:
             current_height += self.console_height
             current_width = 600  # Wider for console
@@ -896,10 +904,6 @@ viewsettings
                 webbrowser.open(fkz_url)
             imgui.pop_style_color()
             
-            # Show hand cursor on hover
-            if imgui.is_item_hovered():
-                imgui.set_mouse_cursor(imgui.MOUSE_CURSOR_HAND)
-            
             imgui.spacing()
             
             # Step 2
@@ -907,7 +911,8 @@ viewsettings
             imgui.text_wrapped("2. Select the .bsp (stuff will decompile)")
             imgui.pop_style_color()
             imgui.push_style_color(imgui.COLOR_TEXT, 0.8, 0.8, 0.8, 1.0)
-            imgui.bullet_text("IF your map has displacements go ahead and open the .vmf in CSGO hammer and save it")
+            imgui.bullet_text("IF your map has displacements go ahead and")
+            imgui.text("     open the .vmf in CSGO hammer and save it")
             imgui.bullet_text("The .vmf is decompiled to \"csgo/maps\"")
             imgui.pop_style_color()
             
@@ -949,6 +954,7 @@ viewsettings
         imgui.text("Addon Name:")
         imgui.set_next_item_width(200)
         _, self.addon = imgui.input_text("##addon", self.addon, 256)
+        self.text_input_hovered = imgui.is_item_hovered()
         
         imgui.spacing()
         imgui.separator()
@@ -1080,6 +1086,20 @@ viewsettings
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
             
             imgui.render()
+            
+            # Set cursor based on what's being hovered
+            # Must be called after imgui.render() to get accurate hover state
+            io = imgui.get_io()
+            if self.text_input_hovered or io.want_text_input:
+                # Text input field is active or hovered
+                glfw.set_cursor(self.window, self.ibeam_cursor)
+            elif imgui.is_any_item_hovered():
+                # Clickable item is hovered
+                glfw.set_cursor(self.window, self.hand_cursor)
+            else:
+                # Default cursor
+                glfw.set_cursor(self.window, self.arrow_cursor)
+            
             self.impl.render(imgui.get_draw_data())
             glfw.swap_buffers(self.window)
         

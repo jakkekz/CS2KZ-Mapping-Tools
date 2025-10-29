@@ -439,11 +439,6 @@ class ImGuiApp:
         glfw.window_hint(glfw.DECORATED, glfw.FALSE)  # Remove window decorations for custom title bar
         glfw.window_hint(glfw.VISIBLE, glfw.FALSE)  # Start hidden to prevent black flash
         
-        # Create custom cursors
-        self.arrow_cursor = None
-        self.hand_cursor = None
-        self.move_cursor = None
-        
         # Create window with calculated height
         window_width = self.get_window_width()
         self.window = glfw.create_window(window_width, self.current_window_height, WINDOW_TITLE, None, None)
@@ -490,6 +485,10 @@ class ImGuiApp:
         
         glfw.make_context_current(self.window)
         glfw.swap_interval(1)  # Enable vsync
+        
+        # Create hand cursor for clickable elements
+        self.hand_cursor = glfw.create_standard_cursor(glfw.HAND_CURSOR)
+        self.arrow_cursor = glfw.create_standard_cursor(glfw.ARROW_CURSOR)
         
         # Set window opacity
         glfw.set_window_opacity(self.window, self.window_opacity)
@@ -671,6 +670,10 @@ class ImGuiApp:
         # Button with fixed size (matching CustomTkinter)
         button_pressed = imgui.button(f"##{name}", width=button_width, height=button_height)
         is_hovered = imgui.is_item_hovered()
+        
+        # Show hand cursor on hover
+        if is_hovered:
+            imgui.set_mouse_cursor(imgui.MOUSE_CURSOR_HAND)
         
         # Show tooltip on hover
         if is_hovered:
@@ -1230,20 +1233,6 @@ class ImGuiApp:
                 imgui.text("Made by ")
                 imgui.same_line(spacing=0)
                 
-                # zer0.k link - use selectable with exact width for inline layout
-                zer0k_width = imgui.calc_text_size("zer0.k").x
-                zer0k_clicked = imgui.selectable("zer0.k", False, flags=imgui.SELECTABLE_DONT_CLOSE_POPUPS, width=zer0k_width)[0]
-                if imgui.is_item_hovered():
-                    self.should_show_hand = True
-                if zer0k_clicked:
-                    import webbrowser
-                    import threading
-                    threading.Thread(target=lambda: webbrowser.open("http://steamcommunity.com/profiles/76561198118681904"), daemon=True).start()
-                
-                imgui.same_line(spacing=0)
-                imgui.text(" and ")
-                imgui.same_line(spacing=0)
-                
                 # jakke link - use selectable with exact width for inline layout
                 jakke_width = imgui.calc_text_size("jakke").x
                 jakke_clicked = imgui.selectable("jakke", False, flags=imgui.SELECTABLE_DONT_CLOSE_POPUPS, width=jakke_width)[0]
@@ -1261,7 +1250,7 @@ class ImGuiApp:
                 if github_clicked:
                     import webbrowser
                     import threading
-                    threading.Thread(target=lambda: webbrowser.open("https://github.com/jakkekz/.jakke"), daemon=True).start()
+                    threading.Thread(target=lambda: webbrowser.open("https://github.com/jakkekz/CS2KZ-Mapping-Tools"), daemon=True).start()
                 
                 imgui.end_menu()
             
@@ -1276,6 +1265,9 @@ class ImGuiApp:
             self.current_window_height = expected_height
             glfw.set_window_size(self.window, expected_width, expected_height)
             self.needs_window_resize = False
+        
+        # Reset hand cursor flag at start of frame
+        self.should_show_hand = False
         
         # Render custom title bar first
         self.render_custom_title_bar()
@@ -1312,7 +1304,7 @@ class ImGuiApp:
             "listen": ("Listen", "listen"),
             "mapping": ("Mapping", "mapping"),
             "source2viewer": ("Source2Viewer", "source2viewer"),
-            "cs2importer": ("CS2 Importer", "cs2importer"),
+            "cs2importer": ("CS2 Map\nImporter", "cs2importer"),
             "skyboxconverter": ("Skybox\nConverter", "skyboxconverter"),
             "vtf2png": ("VTF to PNG", "vtf2png"),
             "loading_screen": ("Loading\nScreen", "loading_screen"),
@@ -1417,6 +1409,10 @@ class ImGuiApp:
         
         imgui.end()
         imgui.pop_style_var(2)
+        
+        # Apply hand cursor if any menu item was hovered
+        if self.should_show_hand:
+            imgui.set_mouse_cursor(imgui.MOUSE_CURSOR_HAND)
     
     def handle_button_click(self, button_name):
         """Handle button clicks"""
@@ -1447,6 +1443,21 @@ class ImGuiApp:
         def run_gui_executable(exe_name):
             """Extract and run a bundled GUI executable folder (onedir format)"""
             try:
+                # If running from source (not frozen), run Python scripts directly
+                if not getattr(sys, 'frozen', False):
+                    # Map exe names to script paths
+                    script_map = {
+                        "CS2Importer.exe": "scripts/porting/cs2importer.py",
+                        "SkyboxConverter.exe": "scripts/skybox_gui.py",
+                        "VTF2PNG.exe": "scripts/vtf2png_gui.py",
+                        "LoadingScreenCreator.exe": "scripts/creator_gui.py",
+                        "PointWorldText.exe": "scripts/pointworldtext.py"
+                    }
+                    script_path = script_map.get(exe_name)
+                    if script_path:
+                        subprocess.Popen([sys.executable, script_path])
+                        return
+                
                 # Get the temp extraction folder
                 temp_base = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 
                                          'Temp', '.CS2KZ-mapping-tools')
@@ -1594,18 +1605,18 @@ class ImGuiApp:
             # Render UI
             self.render_ui()
             
+            # Set cursor based on whether any imgui item wants hover cursor
+            if imgui.is_any_item_hovered() or self.should_show_hand:
+                glfw.set_cursor(self.window, self.hand_cursor)
+            else:
+                glfw.set_cursor(self.window, self.arrow_cursor)
+            
             # Rendering
             gl.glClearColor(0.1, 0.1, 0.1, 1.0)
             gl.glClear(gl.GL_COLOR_BUFFER_BIT)
             
             imgui.render()
             self.impl.render(imgui.get_draw_data())
-            
-            # Update cursor based on flags
-            if self.dragging_button is not None or self.should_show_hand:
-                self.set_cursor("hand")
-            else:
-                self.set_cursor("arrow")
             
             glfw.swap_buffers(self.window)
             

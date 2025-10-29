@@ -736,78 +736,37 @@ try:
 		# Check for embedded materials extracted from BSP
 		embedded_refs_file = s1contentcsgo + "\\" + mapname + "_embedded_refs.txt"
 		if os.path.exists(embedded_refs_file):
-			print(f"Found embedded materials from BSP extraction, deduplicating and importing...")
+			print(f"Found embedded materials from BSP extraction, importing...")
+			# Import embedded materials - need to specify content dir as csgo root since materials are there
+			importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + embedded_refs_file + "\""
+			utl.RunCommand( importcmd, errorCallback )
 			
-			# Read the embedded materials list
+			# Now compile the imported materials
 			refs = utl.ReadTextFile( embedded_refs_file )
 			str = utl.ListStringFromRefs( refs )
 			flatList = str.split( "\n" )
 			
-			# Filter out materials already imported from VMF references
-			unique_embedded = []
-			duplicate_count = 0
-			for line in flatList:
-				if len(line):
-					# Extract material path from the line (e.g., "materials/badges/0.vmt")
-					material_path = line.strip().replace("materials/", "").replace(".vmt", "")
-					material_path = material_path.replace("\\", "/")
-					
-					# Check if this material was already imported from VMF
-					if material_path not in vmf_imported_materials:
-						unique_embedded.append(line)
-					else:
-						duplicate_count += 1
-			
-			if duplicate_count > 0:
-				print(f"Skipping {duplicate_count} materials already imported from VMF references")
-			
-			if len(unique_embedded) == 0:
-				print("All embedded materials were already imported from VMF, skipping...")
-			else:
-				print(f"Importing {len(unique_embedded)} unique embedded materials...")
-				
-				# Create filtered refs file for import
-				filtered_refs_file = embedded_refs_file.replace("_embedded_refs.txt", "_embedded_unique_refs.txt")
-				with open(filtered_refs_file, 'w') as f:
-					f.write("\n".join(unique_embedded))
-				
-				# Import only unique embedded materials
-				importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + filtered_refs_file + "\""
-				try:
-					utl.RunCommand( importcmd, errorCallback )
-				except Exception as e:
-					print(f"Warning: Some embedded materials may have failed to import: {e}")
-					print("Continuing with compilation of successfully imported materials...")
-			
-			# Now compile the imported materials (all embedded materials including duplicates for reference)
 			newList = ""
 			for line in flatList:
 				if len( line ):
 					line = line.replace( ".vmt", ".vmat" )
 					line = line.replace( " ", "_" )
 					newList += s2contentcsgoimported + "\\" + line.replace( "/", "\\" ) + "\n"
+				
+			tmpFile = s2contentcsgoimported + "\\maps\\" + mapname + "_embedded_compile_refs.txt"
+			maps_dir = os.path.dirname(tmpFile)
+			os.makedirs(maps_dir, exist_ok=True)
 			
-		tmpFile = s2contentcsgoimported + "\\maps\\" + mapname + "_embedded_compile_refs.txt"
-		maps_dir = os.path.dirname(tmpFile)
-		os.makedirs(maps_dir, exist_ok=True)
-		
-		utl.EnsureFileWritable( tmpFile )
-		writeFile = open( tmpFile, "w" )
-		writeFile.write( newList )
-		writeFile.close()
-		
-		compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-		try:
+			utl.EnsureFileWritable( tmpFile )
+			writeFile = open( tmpFile, "w" )
+			writeFile.write( newList )
+			writeFile.close()
+			
+			compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
 			utl.RunCommand( compilercmd, errorCallback )
-		except Exception as e:
-			print(f"Warning: Some embedded materials may have failed to compile: {e}")
-			print("Continuing with import process...")
-		
-	print("Re-importing VMF to update with compiled embedded materials...")
-	try:
-		utl.RunCommand( mapImportCmd, errorCallback )
-		print("Successfully re-imported VMF with embedded materials")
-	except Exception as e:
+			
+			print("Re-importing VMF to update with compiled embedded materials...")
+			utl.RunCommand( mapImportCmd, errorCallback )
 		print(f"Warning: VMF re-import failed: {e}")
 		print("Continuing with prefab processing...")
 	

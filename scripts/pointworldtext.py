@@ -504,15 +504,21 @@ class TextStitcherApp:
         close_btn = tk.Button(title_bar, text="✕", bg=TITLE_BAR_BG, fg=DARK_TEXT,
                              font=("Segoe UI", 9), bd=0, padx=15, pady=0,
                              activebackground="#e81123", activeforeground=DARK_TEXT,
+                             cursor="hand2",
                              command=self.close_window)
         close_btn.pack(side=tk.RIGHT)
+        close_btn.bind("<Enter>", lambda e: close_btn.config(bg="#e81123"))
+        close_btn.bind("<Leave>", lambda e: close_btn.config(bg=TITLE_BAR_BG))
         
         # Minimize button (left of close)
         minimize_btn = tk.Button(title_bar, text="─", bg=TITLE_BAR_BG, fg=DARK_TEXT,
                                 font=("Segoe UI", 9), bd=0, padx=15, pady=0,
                                 activebackground="#333333", activeforeground=DARK_TEXT,
+                                cursor="hand2",
                                 command=self.minimize_window)
         minimize_btn.pack(side=tk.RIGHT)
+        minimize_btn.bind("<Enter>", lambda e: minimize_btn.config(bg="#333333"))
+        minimize_btn.bind("<Leave>", lambda e: minimize_btn.config(bg=TITLE_BAR_BG))
     
     def start_drag(self, event):
         self._drag_start_x = event.x
@@ -524,8 +530,10 @@ class TextStitcherApp:
         self.master.geometry(f"+{x}+{y}")
     
     def minimize_window(self):
-        # Can't use iconify() with overrideredirect(True), so withdraw instead
-        self.master.withdraw()
+        # Use iconify with a workaround for overrideredirect
+        self.master.overrideredirect(False)
+        self.master.state('iconic')
+        self.master.overrideredirect(True)
     
     def close_window(self):
         self.master.destroy()
