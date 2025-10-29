@@ -15,6 +15,16 @@ import psutil
 import shutil
 from scripts.settings_manager import SettingsManager
 
+# Helper function for PyInstaller to find bundled files
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 # Window configuration
 WINDOW_WIDTH = 259  # Fixed width for 2 columns: 14 + 112 + 7 + 112 + 14 = 259
 WINDOW_WIDTH_COMPACT = 240  # Width for single column: increased for checkmark space
@@ -474,7 +484,7 @@ class ImGuiApp:
         glfw.set_window_opacity(self.window, self.window_opacity)
         
         # Set window icon (using pyGLFW's internal structure)
-        icon_path = os.path.join("icons", "hammerkz.ico")
+        icon_path = resource_path(os.path.join("icons", "hammerkz.ico"))
         if os.path.exists(icon_path):
             try:
                 import ctypes
@@ -585,7 +595,7 @@ class ImGuiApp:
         }
         
         for name, filename in icons.items():
-            path = os.path.join("icons", filename)
+            path = resource_path(os.path.join("icons", filename))
             if os.path.exists(path):
                 try:
                     img = Image.open(path)
@@ -1400,7 +1410,7 @@ class ImGuiApp:
     def handle_button_click(self, button_name):
         """Handle button clicks"""
         if button_name == "dedicated_server":
-            script_path = os.path.join("scripts", "run-dedicated.py")
+            script_path = resource_path(os.path.join("scripts", "run-dedicated.py"))
             if os.path.exists(script_path):
                 try:
                     # Pass settings as command-line arguments
@@ -1414,7 +1424,7 @@ class ImGuiApp:
                     print(f"Error running run-dedicated.py: {e}")
         
         elif button_name == "insecure":
-            script_path = os.path.join("scripts", "run-insecure.py")
+            script_path = resource_path(os.path.join("scripts", "run-insecure.py"))
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
@@ -1422,7 +1432,7 @@ class ImGuiApp:
                     print(f"Error running run-insecure.py: {e}")
         
         elif button_name == "listen":
-            script_path = os.path.join("scripts", "listen.py")
+            script_path = resource_path(os.path.join("scripts", "listen.py"))
             if os.path.exists(script_path):
                 try:
                     # Pass settings as command-line arguments
@@ -1436,7 +1446,7 @@ class ImGuiApp:
                     print(f"Error running listen.py: {e}")
         
         elif button_name == "mapping":
-            script_path = os.path.join("scripts", "mapping.py")
+            script_path = resource_path(os.path.join("scripts", "mapping.py"))
             if os.path.exists(script_path):
                 try:
                     # Pass settings as command-line arguments
@@ -1451,7 +1461,7 @@ class ImGuiApp:
         
         elif button_name == "source2viewer":
             if self.auto_update_source2viewer:
-                script_path = os.path.join("scripts", "S2V-AUL.py")
+                script_path = resource_path(os.path.join("scripts", "S2V-AUL.py"))
                 if os.path.exists(script_path):
                     try:
                         subprocess.Popen([sys.executable, script_path])
@@ -1474,7 +1484,7 @@ class ImGuiApp:
                     print("Enable auto-update in Settings to download it automatically.")
         
         elif button_name == "cs2importer":
-            script_path = os.path.join("scripts", "porting", "cs2importer.py")
+            script_path = resource_path(os.path.join("scripts", "porting", "cs2importer.py"))
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
@@ -1484,7 +1494,7 @@ class ImGuiApp:
                 print(f"CS2Importer script not found at {script_path}")
         
         elif button_name == "skyboxconverter":
-            script_path = os.path.join("scripts", "skybox_gui.py")
+            script_path = resource_path(os.path.join("scripts", "skybox_gui.py"))
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
@@ -1492,7 +1502,7 @@ class ImGuiApp:
                     print(f"Error running skybox_gui.py: {e}")
         
         elif button_name == "vtf2png":
-            script_path = os.path.join("scripts", "vtf2png_gui.py")
+            script_path = resource_path(os.path.join("scripts", "vtf2png_gui.py"))
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
@@ -1500,7 +1510,7 @@ class ImGuiApp:
                     print(f"Error running vtf2png_gui.py: {e}")
         
         elif button_name == "loading_screen":
-            script_path = os.path.join("scripts", "creator_gui.py")
+            script_path = resource_path(os.path.join("scripts", "creator_gui.py"))
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
@@ -1508,7 +1518,7 @@ class ImGuiApp:
                     print(f"Error running creator_gui.py: {e}")
         
         elif button_name == "point_worldtext":
-            script_path = os.path.join("scripts", "pointworldtext.py")
+            script_path = resource_path(os.path.join("scripts", "pointworldtext.py"))
             if os.path.exists(script_path):
                 try:
                     subprocess.Popen([sys.executable, script_path])
