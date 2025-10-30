@@ -44,11 +44,6 @@ Polished, beautifully crafted ✨ through relentless, high-volume iteration and 
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- Windows OS
-- Counter-Strike 2 installed
-
 ### Installation (Standalone Executable)
 
 1. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
