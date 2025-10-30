@@ -62,7 +62,6 @@ jobs:
             --name=LoadingScreenCreator `
             --icon=icons/loading.ico `
             --add-data="scripts;scripts" `
-            --add-data="chars;chars" `
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=PIL.ImageFont `
@@ -72,6 +71,7 @@ jobs:
           pyinstaller --onedir --windowed `
             --name=PointWorldText `
             --icon=icons/text.ico `
+            --add-data="chars;chars" `
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=PIL.ImageFont `
@@ -91,7 +91,6 @@ jobs:
             --name=CS2KZMappingTools `
             --icon=icons/icon.ico `
             --add-data="icons;icons" `
-            --add-data="chars;chars" `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
             --add-data="gui_tools;gui_tools" `

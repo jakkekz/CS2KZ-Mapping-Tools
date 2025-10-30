@@ -247,8 +247,8 @@ class ImGuiApp:
         except Exception as e:
             print(f"Error clearing version cache: {e}")
     
-    def clear_pointworldtext_cache(self):
-        """Clear Point Worldtext temporary character images"""
+    def clear_temp_folder(self):
+        """Clear temporary folder except Source2Viewer and settings"""
         import tempfile
         temp_dir = tempfile.gettempdir()
         app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
@@ -258,22 +258,28 @@ class ImGuiApp:
         
         try:
             if os.path.exists(app_dir):
-                # Remove all files in the directory except protected files
+                # Remove all files and folders except protected files
                 files_removed = 0
-                for filename in os.listdir(app_dir):
-                    if filename not in keep_files:
-                        file_path = os.path.join(app_dir, filename)
+                folders_removed = 0
+                
+                for item in os.listdir(app_dir):
+                    if item not in keep_files:
+                        item_path = os.path.join(app_dir, item)
                         try:
-                            if os.path.isfile(file_path):
-                                os.remove(file_path)
+                            if os.path.isfile(item_path):
+                                os.remove(item_path)
                                 files_removed += 1
+                            elif os.path.isdir(item_path):
+                                shutil.rmtree(item_path)
+                                folders_removed += 1
                         except Exception as e:
-                            print(f"Error removing {filename}: {e}")
-                print(f"Point Worldtext cache cleared: {files_removed} files removed")
+                            print(f"Error removing {item}: {e}")
+                
+                print(f"Temp folder cleared: {files_removed} files and {folders_removed} folders removed")
             else:
-                print("No Point Worldtext cache found")
+                print("No temp folder found")
         except Exception as e:
-            print(f"Error clearing Point Worldtext cache: {e}")
+            print(f"Error clearing temp folder: {e}")
     
     def clear_all_data(self):
         """Clear all saved data and caches (except Source2Viewer)"""
@@ -1172,7 +1178,7 @@ class ImGuiApp:
                 imgui.separator()
                 
                 # Data (open folder) - clickable header that opens data folder
-                if imgui.menu_item("Data (open folder)")[0]:
+                if imgui.menu_item("Temp folder (open folder)")[0]:
                     self.open_data_folder()
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
@@ -1189,7 +1195,7 @@ class ImGuiApp:
                     self.should_show_hand = True
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(250)
-                    imgui.text("Remove saved app settings\n(theme, window position, button\nvisibility, etc)")
+                    imgui.text("Clear saved app settings\n(theme, window position, button\nvisibility, etc)")
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 
@@ -1200,18 +1206,18 @@ class ImGuiApp:
                     self.should_show_hand = True
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(250)
-                    imgui.text("Remove saved Metamod/CS2KZ\nversion information\n(forces update check)")
+                    imgui.text("Clear saved Metamod/CS2KZ\nversion information\n(forces update check)")
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 
-                # Clear Point Worldtext Cache
-                if imgui.menu_item("  Clear Point Worldtext Cache")[0]:
-                    self.clear_pointworldtext_cache()
+                # Clear Temp Folder
+                if imgui.menu_item("  Clear Temp Folder")[0]:
+                    self.clear_temp_folder()
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(250)
-                    imgui.text("Remove temporary character\nimages from Point Worldtext tool")
+                    imgui.text("Clear files and folders (keeps\nSource2Viewer and settings)")
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 
@@ -1222,7 +1228,7 @@ class ImGuiApp:
                     self.should_show_hand = True
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(250)
-                    imgui.text("Remove Source2Viewer executable\nfrom the data folder")
+                    imgui.text("Remove Source2Viewer executable\nfrom the temp folder")
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 
