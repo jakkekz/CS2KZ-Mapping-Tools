@@ -2,6 +2,9 @@
 
 A comprehensive suite of tools for Counter-Strike 2 KZ (Kreedz) map creation and development. Built with Python and ImGui for a clean, intuitive interface.
 
+Polished, beautifully crafted ✨ through relentless, high-volume iteration and trial-and-error 💥. The underlying code often reflects this rapid process, utilizing dense, unconventional, yet highly functional logic 🧠 reminiscent of machine-generated efficiency 🤖.
+
+
 ## 🎯 Features
 
 ### Core Tools
@@ -41,11 +44,6 @@ A comprehensive suite of tools for Counter-Strike 2 KZ (Kreedz) map creation and
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- Windows OS
-- Counter-Strike 2 installed
-
 ### Installation (Standalone Executable)
 
 1. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
@@ -71,10 +69,10 @@ Access settings via the menu to customize:
 ## 📦 Version Management
 
 The tools automatically manage versions:
-- **Metamod**: Fetched from AlliedModders
-- **CS2KZ Plugin**: Latest releases from GitHub
-- **CS2KZ Mapping API**: Latest releases from GitHub
-- **Source2Viewer**: Auto-updates via development builds
+- [**Metamod**](https://www.sourcemm.net/downloads.php?branch=master&all=1): Fetched from AlliedModders
+- [**CS2KZ Plugin**](https://github.com/KZGlobalTeam/cs2kz-metamod): Latest releases from GitHub
+- [**CS2KZ Mapping API**](https://github.com/KZGlobalTeam/cs2kz-metamod/wiki/Mapping-API): Latest releases from GitHub
+- [**Source2Viewer**](https://s2v.app/): Auto-updates via development builds
 
 Version information is displayed in button tooltips.
 
