@@ -63,16 +63,16 @@ class ImGuiApp:
         # Button visibility states from settings
         saved_visibility = self.settings.get_visible_buttons()
         self.button_visibility = {
-            "dedicated_server": saved_visibility.get("dedicated_server", True),
-            "insecure": saved_visibility.get("insecure", True),
+            "dedicated_server": saved_visibility.get("dedicated_server", False),
+            "insecure": saved_visibility.get("insecure", False),
             "listen": saved_visibility.get("listen", True),
             "mapping": saved_visibility.get("mapping", True),
             "source2viewer": saved_visibility.get("source2viewer", True),
             "cs2importer": saved_visibility.get("cs2importer", True),
             "skyboxconverter": saved_visibility.get("skyboxconverter", True),
-            "vtf2png": saved_visibility.get("vtf2png", True),
+            "vtf2png": saved_visibility.get("vtf2png", False),
             "loading_screen": saved_visibility.get("loading_screen", True),
-            "point_worldtext": saved_visibility.get("point_worldtext", True)
+            "point_worldtext": saved_visibility.get("point_worldtext", False)
         }
         
         # Button order from settings
@@ -195,16 +195,16 @@ class ImGuiApp:
             
             # Reset app state to match defaults
             self.button_visibility = {
-                "dedicated_server": True,
-                "insecure": True,
+                "dedicated_server": False,
+                "insecure": False,
                 "listen": True,
                 "mapping": True,
                 "source2viewer": True,
                 "cs2importer": True,
                 "skyboxconverter": True,
-                "vtf2png": True,
+                "vtf2png": False,
                 "loading_screen": True,
-                "point_worldtext": True
+                "point_worldtext": False
             }
             self.button_order = ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png']
             self.show_move_icons = False
@@ -351,6 +351,30 @@ class ImGuiApp:
         except Exception as e:
             print(f"Error opening data folder: {e}")
     
+    def format_version(self, version_string):
+        """Format version string to show only version and build number
+        Example: 'Metamod: 2.0.0 (build 1367)' -> '2.0.0 (build 1367)'
+        Example: 'mmsource-2.0.0-git1367-windows.zip' -> '2.0.0 (build 1367)'
+        """
+        if not version_string or version_string == 'Not installed':
+            return version_string
+        
+        # Handle Metamod filename format: mmsource-2.0.0-git1367-windows.zip
+        if version_string.startswith('mmsource-') and version_string.endswith('.zip'):
+            # Extract version and build from filename
+            import re
+            match = re.match(r'mmsource-(\d+\.\d+\.\d+)-git(\d+)-.*\.zip', version_string)
+            if match:
+                version = match.group(1)
+                build = match.group(2)
+                return f"{version} (build {build})"
+        
+        # Strip prefix like "Metamod: " or "CS2KZ: "
+        if ':' in version_string:
+            version_string = version_string.split(':', 1)[1].strip()
+        
+        return version_string
+    
     def get_button_tooltip(self, name):
         """Get tooltip text for a button"""
         import tempfile
@@ -370,21 +394,25 @@ class ImGuiApp:
             except:
                 pass
         
+        # Format version strings
+        metamod_version = self.format_version(versions.get('metamod', 'Not installed'))
+        cs2kz_version = self.format_version(versions.get('cs2kz', 'Not installed'))
+        
         # Get Source2Viewer path
         s2v_path = os.path.join(app_dir, 'Source2Viewer.exe')
         
         tooltips = {
-            "mapping": f"Launches CS2 Hammer Editor with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {versions.get('metamod', 'Not installed')}\nCS2KZ: {versions.get('cs2kz', 'Not installed')}",
+            "mapping": f"Launches CS2 Hammer Editor with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {metamod_version}\nCS2KZ: {cs2kz_version}",
             
-            "listen": f"Launches CS2 with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {versions.get('metamod', 'Not installed')}\nCS2KZ: {versions.get('cs2kz', 'Not installed')}",
+            "listen": f"Launches CS2 with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {metamod_version}\nCS2KZ: {cs2kz_version}",
             
-            "dedicated_server": f"Launches a CS2 Dedicated Server with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {versions.get('metamod', 'Not installed')}\nCS2KZ: {versions.get('cs2kz', 'Not installed')}",
+            "dedicated_server": f"Launches a CS2 Dedicated Server with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {metamod_version}\nCS2KZ: {cs2kz_version}",
             
             "insecure": "Launches CS2 in insecure mode.",
             
             "source2viewer": (f"Launches Source2Viewer with the latest dev build. (Updates may take some time)\n\nInstalls to: {s2v_path}", True),  # Tuple: (text, has_orange)
 
-            "cs2importer": "Port CS:GO maps to CS2 with the best tool around.\n\nInspired by:\nsarim-hk\nandreaskeller96",
+            "cs2importer": "Port CS:GO maps to CS2.\n\nInspired by:\nsarim-hk\nandreaskeller96",
 
             "skyboxconverter": "Automate the converting of (CS:GO etc...) cubemap skyboxes to a CS2 compatible format.",
             
@@ -1184,17 +1212,6 @@ class ImGuiApp:
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(250)
                     imgui.text("Remove temporary character\nimages from Point Worldtext tool")
-                    imgui.pop_text_wrap_pos()
-                    imgui.end_tooltip()
-                
-                # Clear All Data
-                if imgui.menu_item("  Clear All Data")[0]:
-                    self.clear_all_data()
-                if imgui.is_item_hovered():
-                    self.should_show_hand = True
-                    imgui.begin_tooltip()
-                    imgui.push_text_wrap_pos(250)
-                    imgui.text("Remove all saved data and cache\n(preserves Source2Viewer)")
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 
