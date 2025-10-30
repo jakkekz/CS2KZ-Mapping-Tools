@@ -590,6 +590,9 @@ def DisableVPKSignatures(s2gamecsgo):
 	
 	if os.path.exists(vpk_sig_path):
 		try:
+			# Delete old backup if it exists
+			if os.path.exists(vpk_sig_old):
+				os.remove(vpk_sig_old)
 			# Rename to .old to disable signature checking
 			os.rename(vpk_sig_path, vpk_sig_old)
 			print(f"Disabled VPK signature checking (renamed to vpk.signatures.old)")
@@ -659,7 +662,7 @@ if ( not os.path.exists( s2gamecsgogi ) ):
 s2gameaddondir = "game\\csgo_addons\\" + s2addon
 s2gameaddon = s2gamecsgo.replace( "game\\csgo", s2gameaddondir )
 
-s2contentcsgo = s2gameaddon.replace( "game\csgo_addons", "content\csgo_addons" )
+s2contentcsgo = s2gameaddon.replace( r"game\csgo_addons", r"content\csgo_addons" )
 s2contentcsgoimported = s2contentcsgo
 
 # Define a non-aborting error callback for all import operations
@@ -762,13 +765,15 @@ try:
 			writeFile.write( newList )
 			writeFile.close()
 			
-			compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-			utl.RunCommand( compilercmd, errorCallback )
-			
-			print("Re-importing VMF to update with compiled embedded materials...")
+		compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+		utl.RunCommand( compilercmd, errorCallback )
+		
+		print("Re-importing VMF to update with compiled embedded materials...")
+		try:
 			utl.RunCommand( mapImportCmd, errorCallback )
-		print(f"Warning: VMF re-import failed: {e}")
-		print("Continuing with prefab processing...")
+		except Exception as e:
+			print(f"Warning: VMF re-import failed: {e}")
+			print("Continuing with prefab processing...")
 	
 	# Check if refs file exists to process prefab dependencies
 	# Refs files are now in maps\ folder after the initial import
@@ -800,7 +805,9 @@ try:
 			print(f"Warning: Final VMF import failed: {e}")
 			print("Import process completed with some errors")
 	else:
-		print(f"No refs file found, skipping prefab dependency processing")	# Move all .vmap files (main map only) to maps subfolder
+		print(f"No refs file found, skipping prefab dependency processing")
+	
+	# Move all .vmap files (main map only) to maps subfolder
 	# This must happen AFTER the final re-import so we move the updated VMAP
 	maps_dir = s2contentcsgo + "\\maps"
 	os.makedirs(maps_dir, exist_ok=True)

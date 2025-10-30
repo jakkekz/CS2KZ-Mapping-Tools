@@ -632,7 +632,21 @@ class TextStitcherApp:
         if file_path:
             try:
                 self.last_pil_image.save(file_path)
-                self.status_label.config(text=f"Image saved to {file_path}", fg="green")
+                
+                # Create alpha mask: Convert alpha channel to grayscale
+                # Extract the alpha channel from the saved image
+                alpha_channel = self.last_pil_image.split()[3]  # RGBA - index 3 is alpha
+                
+                # Create RGB image from the alpha channel (grayscale representation)
+                alpha_mask = Image.new('RGB', self.last_pil_image.size, (0, 0, 0))
+                alpha_mask.paste(alpha_channel, mask=None)
+                
+                # Save alpha mask with _alpha suffix
+                base_path, ext = os.path.splitext(file_path)
+                alpha_mask_path = f"{base_path}_alpha{ext}"
+                alpha_mask.save(alpha_mask_path)
+                
+                self.status_label.config(text=f"Image and alpha mask saved to {os.path.dirname(file_path)}", fg="green")
             except Exception as e:
                 messagebox.showerror("Save Error", f"Failed to save image: {e}")
                 self.status_label.config(text="Failed to save image.", fg="red")
