@@ -2,6 +2,9 @@
 
 A comprehensive suite of tools for Counter-Strike 2 KZ (Kreedz) map creation and development. Built with Python and ImGui for a clean, intuitive interface.
 
+Polished, beautifully crafted ✨ through relentless, high-volume iteration and trial-and-error 💥. The underlying code often reflects this rapid process, utilizing dense, unconventional, yet highly functional logic 🧠 reminiscent of machine-generated efficiency 🤖.
+
+
 ## 🎯 Features
 
 ### Core Tools
