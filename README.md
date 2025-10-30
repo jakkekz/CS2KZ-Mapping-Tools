@@ -69,10 +69,10 @@ Access settings via the menu to customize:
 ## 📦 Version Management
 
 The tools automatically manage versions:
-- **Metamod**: Fetched from AlliedModders
-- **CS2KZ Plugin**: Latest releases from GitHub
-- **CS2KZ Mapping API**: Latest releases from GitHub
-- **Source2Viewer**: Auto-updates via development builds
+- [**Metamod**](https://www.sourcemm.net/downloads.php?branch=master&all=1): Fetched from AlliedModders
+- [**CS2KZ Plugin**](https://github.com/KZGlobalTeam/cs2kz-metamod): Latest releases from GitHub
+- [**CS2KZ Mapping API**](https://github.com/KZGlobalTeam/cs2kz-metamod/wiki/Mapping-API): Latest releases from GitHub
+- [**Source2Viewer**](https://s2v.app/): Auto-updates via development builds
 
 Version information is displayed in button tooltips.
 
