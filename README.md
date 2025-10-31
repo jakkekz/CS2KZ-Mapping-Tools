@@ -49,6 +49,12 @@ Polished, beautifully crafted ✨ through relentless, high-volume iteration and 
 1. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
 2. Run `CS2KZMappingTools.exe`
 
+### Updating
+
+1. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
+2. Run `CS2KZMappingTools.exe`
+3. Open `Settings` -> `Clear Temp Folder`
+4. Ready to go again
 
 ## ⚙️ Configuration
 
