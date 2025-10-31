@@ -37,18 +37,24 @@ def get_python_executable():
         return sys.executable
 
 # Window configuration
-WINDOW_WIDTH = 259  # Fixed width for 2 columns: 14 + 112 + 7 + 112 + 14 = 259
+WINDOW_WIDTH = 259  # Fixed width for 2 columns (old non-compact): 14 + 112 + 7 + 112 + 14 = 259
+WINDOW_WIDTH_NON_COMPACT = 828  # Width for non-compact: 20% wider than original 690px
 WINDOW_WIDTH_COMPACT = 240  # Width for single column: increased for checkmark space
 CUSTOM_TITLE_BAR_HEIGHT = 30  # Custom title bar height
 MENU_BAR_HEIGHT = 0
 TOP_PADDING = 0  # Padding above buttons - customize this value
-BUTTON_SIZE = 112
+BUTTON_SIZE = 112  # Old button size (unused now)
+BUTTON_SIZE_NON_COMPACT = 140  # Height for non-compact mode (70% of 200)
+BUTTON_SIZE_NON_COMPACT_WIDTH = 260  # Width for non-compact mode (fits 3 columns in 828px window)
 BUTTON_SIZE_COMPACT_WIDTH = 212  # Wider button for compact mode (240 - 14 - 14 = 212)
 BUTTON_SIZE_COMPACT_HEIGHT = 40  # Shorter button for compact mode
-BUTTON_SPACING = 7
-ROW_HEIGHT = BUTTON_SIZE + BUTTON_SPACING  # Space for button + spacing between rows
-ROW_HEIGHT_COMPACT = BUTTON_SIZE_COMPACT_HEIGHT + BUTTON_SPACING  # Space for compact buttons
-BOTTOM_PADDING = 55  # Padding below buttons - customize this value
+BUTTON_SPACING = 10  # Increased spacing for non-compact
+BUTTON_SPACING_COMPACT = 7  # Original spacing for compact
+ROW_HEIGHT = BUTTON_SIZE + BUTTON_SPACING  # Space for button + spacing between rows (old)
+ROW_HEIGHT_NON_COMPACT = BUTTON_SIZE_NON_COMPACT + BUTTON_SPACING  # Button + spacing (no label box now)
+ROW_HEIGHT_COMPACT = BUTTON_SIZE_COMPACT_HEIGHT + BUTTON_SPACING_COMPACT  # Space for compact buttons
+BOTTOM_PADDING = 55  # Padding below buttons - compact mode uses this
+BOTTOM_PADDING_NON_COMPACT = 45  # Padding for non-compact mode
 WINDOW_TITLE = "CS2KZ Mapping Tools"
 
 
@@ -83,9 +89,17 @@ class ImGuiApp:
         self.auto_update_source2viewer = self.settings.get('auto_update_source2viewer', True)
         self.auto_update_metamod = self.settings.get('auto_update_metamod', True)
         self.auto_update_cs2kz = self.settings.get('auto_update_cs2kz', True)
-        self.compact_mode = self.settings.get('compact_mode', True)
-        appearance = self.settings.get('appearance_mode', 'dark')
-        self.dark_mode = appearance == 'dark' or appearance == 'system'
+        self.compact_mode = self.settings.get('compact_mode', False)  # Default to non-compact mode
+        
+        # Theme system - support both old and new format
+        appearance = self.settings.get('appearance_mode', 'grey')
+        # Convert old dark/light to new theme names
+        if appearance == 'dark':
+            appearance = 'grey'
+        elif appearance == 'light':
+            appearance = 'white'
+        self.current_theme = appearance
+        self.dark_mode = appearance not in ['white']  # For compatibility with existing code
         
         # Window opacity
         self.window_opacity = self.settings.get('window_opacity', 1.0)
@@ -211,7 +225,8 @@ class ImGuiApp:
             self.auto_update_source2viewer = True
             self.auto_update_metamod = True
             self.auto_update_cs2kz = True
-            self.compact_mode = True
+            self.compact_mode = False  # Default to non-compact mode
+            self.current_theme = 'grey'  # Default theme
             self.dark_mode = True
             self.window_opacity = 1.0
             self.always_on_top = False
@@ -408,15 +423,15 @@ class ImGuiApp:
         s2v_path = os.path.join(app_dir, 'Source2Viewer.exe')
         
         tooltips = {
-            "mapping": f"Launches CS2 Hammer Editor with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {metamod_version}\nCS2KZ: {cs2kz_version}",
+            "mapping": "Launches CS2 Hammer Editor with the latest Metamod, CS2KZ and Mapping API versions. (insecure)",
             
-            "listen": f"Launches CS2 with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {metamod_version}\nCS2KZ: {cs2kz_version}",
+            "listen": "Launches CS2 with the latest Metamod, CS2KZ and Mapping API versions. (insecure)",
             
-            "dedicated_server": f"Launches a CS2 Dedicated Server with the latest Metamod, CS2KZ and Mapping API versions. (insecure)\n\nInstalled versions:\nMetamod: {metamod_version}\nCS2KZ: {cs2kz_version}",
+            "dedicated_server": "Launches a CS2 Dedicated Server with the latest Metamod, CS2KZ and Mapping API versions. (insecure)",
             
             "insecure": "Launches CS2 in insecure mode.",
             
-            "source2viewer": (f"Launches Source2Viewer with the latest dev build. (Updates may take some time)\n\nInstalls to: {s2v_path}", True),  # Tuple: (text, has_orange)
+            "source2viewer": f"Launches Source2Viewer with the latest dev build. (Updates may take some time)",
 
             "cs2importer": "Port CS:GO maps to CS2.\n\nInspired by:\nsarim-hk\nandreaskeller96",
 
@@ -429,11 +444,47 @@ class ImGuiApp:
             "vtf2png": "Convert CS:GO vtf files to png images."
         }
         
-        result = tooltips.get(name, "")
-        # Return just the text if it's a tuple, otherwise return as-is
-        if isinstance(result, tuple):
-            return result[0]
-        return result
+        return tooltips.get(name, "")
+    
+    def get_button_version(self, name):
+        """Get version string for a button"""
+        import tempfile
+        
+        temp_dir = os.getenv('TEMP')
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
+        versions = {}
+        
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, 'r') as f:
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            versions[key] = value
+            except:
+                pass
+        
+        # Return version info based on button type
+        if name in ['mapping', 'listen', 'dedicated_server']:
+            metamod = self.format_version(versions.get('metamod', 'N/A'))
+            cs2kz = self.format_version(versions.get('cs2kz', 'N/A'))
+            return [f"KZ: {cs2kz}", f"MM: {metamod}"]  # KZ first, then MM
+        elif name == 'source2viewer':
+            # Check if Source2Viewer.exe exists first
+            s2v_path = os.path.join(app_dir, 'Source2Viewer.exe')
+            if not os.path.exists(s2v_path):
+                return ["Not installed"]
+            
+            # Check if we have a saved commit version
+            s2v_version = versions.get('source2viewer', None)
+            if s2v_version:
+                return [f"Commit: {s2v_version}"]
+            
+            # Fallback if installed but no version saved
+            return ["Installed"]
+        
+        return []
     
     def calculate_window_height(self):
         """Calculate window height based on number of visible buttons"""
@@ -443,13 +494,13 @@ class ImGuiApp:
             num_rows = visible_count if visible_count > 0 else 1
             return CUSTOM_TITLE_BAR_HEIGHT + MENU_BAR_HEIGHT + TOP_PADDING + (num_rows * ROW_HEIGHT_COMPACT) + BOTTOM_PADDING
         else:
-            # 2 columns
-            num_rows = (visible_count + 1) // 2 if visible_count > 0 else 1
-            return CUSTOM_TITLE_BAR_HEIGHT + MENU_BAR_HEIGHT + TOP_PADDING + (num_rows * ROW_HEIGHT) + BOTTOM_PADDING
+            # 3 columns for non-compact mode
+            num_rows = (visible_count + 2) // 3 if visible_count > 0 else 1
+            return CUSTOM_TITLE_BAR_HEIGHT + MENU_BAR_HEIGHT + TOP_PADDING + (num_rows * ROW_HEIGHT_NON_COMPACT) + BOTTOM_PADDING_NON_COMPACT
     
     def get_window_width(self):
         """Get window width based on compact mode"""
-        return WINDOW_WIDTH_COMPACT if self.compact_mode else WINDOW_WIDTH
+        return WINDOW_WIDTH_COMPACT if self.compact_mode else WINDOW_WIDTH_NON_COMPACT
     
     def swap_buttons(self, button1, button2):
         """Swap positions of two buttons in the order"""
@@ -580,32 +631,129 @@ class ImGuiApp:
         # Enable font with better rendering
         io.font_global_scale = 1.0
         
-        if self.dark_mode:
-            imgui.style_colors_dark()
-            # Match CustomTkinter dark theme
-            style.colors[imgui.COLOR_WINDOW_BACKGROUND] = (0.1, 0.1, 0.1, 1.0)
-            style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = (0.16, 0.16, 0.16, 1.0)
-            style.colors[imgui.COLOR_BUTTON] = (0.29, 0.29, 0.29, 1.0)  # gray25
-            style.colors[imgui.COLOR_BUTTON_HOVERED] = (0.35, 0.35, 0.35, 1.0)  # gray30
-            style.colors[imgui.COLOR_BUTTON_ACTIVE] = (0.40, 0.40, 0.40, 1.0)
-            style.colors[imgui.COLOR_BORDER] = (0.40, 0.40, 0.40, 1.0)  # gray40
-            style.colors[imgui.COLOR_TEXT] = (1.0, 1.0, 1.0, 1.0)
-            # Menu items hover (match button hover)
-            style.colors[imgui.COLOR_HEADER_HOVERED] = (0.35, 0.35, 0.35, 1.0)  # Same as button hover
-            style.colors[imgui.COLOR_HEADER_ACTIVE] = (0.40, 0.40, 0.40, 1.0)
+        # Theme definitions (background, menubar, button, button_hover, button_active, border, text)
+        self.themes = {
+            'grey': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.1, 0.1, 0.1, 1.0),
+                'menubar_bg': (0.16, 0.16, 0.16, 1.0),
+                'button': (0.29, 0.29, 0.29, 1.0),
+                'button_hover': (0.35, 0.35, 0.35, 1.0),
+                'button_active': (0.40, 0.40, 0.40, 1.0),
+                'border': (0.40, 0.40, 0.40, 1.0),
+                'text': (1.0, 1.0, 1.0, 1.0)
+            },
+            'black': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.0, 0.0, 0.0, 1.0),
+                'menubar_bg': (0.05, 0.05, 0.05, 1.0),
+                'button': (0.15, 0.15, 0.15, 1.0),
+                'button_hover': (0.20, 0.20, 0.20, 1.0),
+                'button_active': (0.25, 0.25, 0.25, 1.0),
+                'border': (0.30, 0.30, 0.30, 1.0),
+                'text': (1.0, 1.0, 1.0, 1.0)
+            },
+            'white': {
+                'base': imgui.style_colors_light,
+                'window_bg': (0.94, 0.94, 0.94, 1.0),
+                'menubar_bg': (0.88, 0.88, 0.88, 1.0),
+                'button': (0.75, 0.75, 0.75, 1.0),
+                'button_hover': (0.70, 0.70, 0.70, 1.0),
+                'button_active': (0.65, 0.65, 0.65, 1.0),
+                'border': (0.60, 0.60, 0.60, 1.0),
+                'text': (0.1, 0.1, 0.1, 1.0)
+            },
+            'pink': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.25, 0.12, 0.18, 1.0),
+                'menubar_bg': (0.30, 0.15, 0.22, 1.0),
+                'button': (0.55, 0.25, 0.40, 1.0),
+                'button_hover': (0.65, 0.30, 0.48, 1.0),
+                'button_active': (0.75, 0.35, 0.55, 1.0),
+                'border': (0.80, 0.40, 0.60, 1.0),
+                'text': (1.0, 0.95, 0.98, 1.0)
+            },
+            'orange': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.25, 0.15, 0.08, 1.0),
+                'menubar_bg': (0.30, 0.18, 0.10, 1.0),
+                'button': (0.60, 0.35, 0.15, 1.0),
+                'button_hover': (0.70, 0.40, 0.18, 1.0),
+                'button_active': (0.80, 0.45, 0.20, 1.0),
+                'border': (0.85, 0.50, 0.25, 1.0),
+                'text': (1.0, 0.98, 0.95, 1.0)
+            },
+            'blue': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.08, 0.12, 0.25, 1.0),
+                'menubar_bg': (0.10, 0.15, 0.30, 1.0),
+                'button': (0.20, 0.30, 0.60, 1.0),
+                'button_hover': (0.25, 0.35, 0.70, 1.0),
+                'button_active': (0.30, 0.40, 0.80, 1.0),
+                'border': (0.35, 0.45, 0.85, 1.0),
+                'text': (0.95, 0.98, 1.0, 1.0)
+            },
+            'red': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.25, 0.08, 0.08, 1.0),
+                'menubar_bg': (0.30, 0.10, 0.10, 1.0),
+                'button': (0.60, 0.20, 0.20, 1.0),
+                'button_hover': (0.70, 0.25, 0.25, 1.0),
+                'button_active': (0.80, 0.30, 0.30, 1.0),
+                'border': (0.85, 0.35, 0.35, 1.0),
+                'text': (1.0, 0.95, 0.95, 1.0)
+            },
+            'green': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.08, 0.18, 0.08, 1.0),
+                'menubar_bg': (0.10, 0.22, 0.10, 1.0),
+                'button': (0.20, 0.50, 0.20, 1.0),
+                'button_hover': (0.25, 0.60, 0.25, 1.0),
+                'button_active': (0.30, 0.70, 0.30, 1.0),
+                'border': (0.35, 0.75, 0.35, 1.0),
+                'text': (0.95, 1.0, 0.95, 1.0)
+            },
+            'yellow': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.5, 0.5, 0.00, 1.0),
+                'menubar_bg': (0.5, 0.5, 0.00, 1.0),
+                'button': (0.60, 0.55, 0.15, 1.0),
+                'button_hover': (0.70, 0.65, 0.20, 1.0),
+                'button_active': (0.80, 0.75, 0.25, 1.0),
+                'border': (0.85, 0.80, 0.30, 1.0),
+                'text': (1.0, 1.0, 0.90, 1.0)
+            }
+        }
+        
+        # Get current theme or default to grey
+        theme = self.themes.get(self.current_theme, self.themes['grey'])
+        
+        # Apply base style
+        theme['base']()
+        
+        # Apply theme colors
+        style.colors[imgui.COLOR_WINDOW_BACKGROUND] = theme['window_bg']
+        style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = theme['menubar_bg']
+        style.colors[imgui.COLOR_BUTTON] = theme['button']
+        style.colors[imgui.COLOR_BUTTON_HOVERED] = theme['button_hover']
+        style.colors[imgui.COLOR_BUTTON_ACTIVE] = theme['button_active']
+        style.colors[imgui.COLOR_BORDER] = theme['border']
+        style.colors[imgui.COLOR_TEXT] = theme['text']
+        # Menu items hover (match button hover)
+        style.colors[imgui.COLOR_HEADER_HOVERED] = theme['button_hover']
+        style.colors[imgui.COLOR_HEADER_ACTIVE] = theme['button_active']
+        
+        # Make popup/menu backgrounds semi-transparent for white theme
+        if self.current_theme == 'white':
+            # Semi-transparent white for popups/menus
+            style.colors[imgui.COLOR_POPUP_BACKGROUND] = (0.94, 0.94, 0.94, 0.92)
         else:
-            imgui.style_colors_light()
-            # Match CustomTkinter light theme
-            style.colors[imgui.COLOR_WINDOW_BACKGROUND] = (0.94, 0.94, 0.94, 1.0)
-            style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = (0.88, 0.88, 0.88, 1.0)
-            style.colors[imgui.COLOR_BUTTON] = (0.75, 0.75, 0.75, 1.0)  # gray75
-            style.colors[imgui.COLOR_BUTTON_HOVERED] = (0.70, 0.70, 0.70, 1.0)  # gray70
-            style.colors[imgui.COLOR_BUTTON_ACTIVE] = (0.65, 0.65, 0.65, 1.0)
-            style.colors[imgui.COLOR_BORDER] = (0.60, 0.60, 0.60, 1.0)  # gray60
-            style.colors[imgui.COLOR_TEXT] = (0.1, 0.1, 0.1, 1.0)
-            # Menu items hover (match button hover)
-            style.colors[imgui.COLOR_HEADER_HOVERED] = (0.70, 0.70, 0.70, 1.0)  # Same as button hover
-            style.colors[imgui.COLOR_HEADER_ACTIVE] = (0.65, 0.65, 0.65, 1.0)
+            # Keep popup background matching window for dark themes (or slightly transparent)
+            r, g, b, _ = theme['window_bg']
+            style.colors[imgui.COLOR_POPUP_BACKGROUND] = (r, g, b, 0.94)
+        
+        # Update dark_mode flag for compatibility
+        self.dark_mode = self.current_theme not in ['white']
         
         # Rounded corners (match CustomTkinter)
         style.window_rounding = 0.0  # Window itself not rounded
@@ -690,16 +838,22 @@ class ImGuiApp:
             button_width = BUTTON_SIZE_COMPACT_WIDTH
             button_height = BUTTON_SIZE_COMPACT_HEIGHT
             icon_size = 24
+            spacing = BUTTON_SPACING_COMPACT
         else:
-            button_width = BUTTON_SIZE
-            button_height = BUTTON_SIZE
-            icon_size = 56
+            button_width = BUTTON_SIZE_NON_COMPACT_WIDTH
+            button_height = BUTTON_SIZE_NON_COMPACT
+            icon_size = 64  # Icon size for non-compact mode
+            spacing = BUTTON_SPACING
         
-        # If disabled, push grayed-out style
+        # If disabled, push darker theme-based style
         if is_disabled:
-            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.2, 0.2, 1.0)
-            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.2, 0.2, 0.2, 1.0)
-            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.2, 0.2, 0.2, 1.0)
+            theme = self.themes.get(self.current_theme, self.themes['grey'])
+            # Make button colors darker (multiply by 0.4 for disabled state)
+            r, g, b, a = theme['button']
+            disabled_color = (r * 0.4, g * 0.4, b * 0.4, a)
+            imgui.push_style_color(imgui.COLOR_BUTTON, *disabled_color)
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, *disabled_color)
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, *disabled_color)
         
         # Button with fixed size (matching CustomTkinter)
         button_pressed = imgui.button(f"##{name}", width=button_width, height=button_height)
@@ -709,8 +863,8 @@ class ImGuiApp:
         if is_hovered:
             imgui.set_mouse_cursor(imgui.MOUSE_CURSOR_HAND)
         
-        # Show tooltip on hover
-        if is_hovered:
+        # Show tooltip on hover (only in compact mode, non-compact uses label box)
+        if is_hovered and self.compact_mode:
             tooltip_text = self.get_button_tooltip(name)
             if tooltip_text:
                 # Use window width minus padding for text wrapping
@@ -783,13 +937,134 @@ class ImGuiApp:
                 # For compact mode, use single line (replace \n with space)
                 single_line_label = label.replace('\n', ' ')
                 draw_list.add_text(text_x, text_y, text_color, single_line_label)
+                
+                # Draw version info on the right side in compact mode
+                version_lines = self.get_button_version(name)
+                if version_lines:
+                    # Use smaller, dimmer text for version
+                    if is_disabled:
+                        version_color = imgui.get_color_u32_rgba(0.3, 0.3, 0.3, 1)
+                    else:
+                        version_color = imgui.get_color_u32_rgba(0.6, 0.6, 0.6, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
+                    
+                    # Use smaller font scale
+                    io = imgui.get_io()
+                    original_scale = io.font_global_scale
+                    io.font_global_scale = 0.75
+                    
+                    if len(version_lines) == 2:
+                        # For mapping/listen/dedicated: stack KZ and MM vertically on the right
+                        line_height = 10
+                        num_lines = len(version_lines)
+                        
+                        # Start from top of button with some padding
+                        start_y = button_min.y + (button_height - (num_lines * line_height)) // 2
+                        
+                        for i, line in enumerate(version_lines):
+                            # Extract the version part and format appropriately
+                            if ': ' in line:
+                                prefix, version = line.split(': ', 1)
+                                # Extract version number and build separately
+                                if 'build' in version:
+                                    # Format: "2.0.0 (build 1367)" or "0.0.068 (build 1367)" -> extract version and build
+                                    import re
+                                    match = re.match(r'([\d.]+)\s*\(build\s*(\d+)\)', version)
+                                    if match:
+                                        ver_num = match.group(1)
+                                        build_num = match.group(2)
+                                        if prefix == "KZ":
+                                            # Remove leading 'v' if present in ver_num
+                                            ver_num = ver_num.lstrip('v')
+                                            version_text = f"CS2KZ v{ver_num}"
+                                        else:  # MM
+                                            version_text = f"MetaMod b{build_num}"
+                                    else:
+                                        # No build number found in regex, use prefix
+                                        if prefix == "KZ":
+                                            # Remove leading 'v' if present
+                                            version = version.lstrip('v')
+                                            version_text = f"CS2KZ v{version}"
+                                        else:
+                                            version_text = f"MetaMod {version}"
+                                else:
+                                    # No "build" keyword, just show version with prefix
+                                    if prefix == "KZ":
+                                        # Remove leading 'v' if present
+                                        version = version.lstrip('v')
+                                        version_text = f"CS2KZ v{version}"
+                                    else:
+                                        version_text = f"MetaMod {version}"
+                            else:
+                                version_text = line
+                            
+                            # Calculate text width and position on right
+                            text_width = imgui.calc_text_size(version_text).x
+                            version_x = button_max.x - text_width - 8
+                            version_y = start_y + (i * line_height)
+                            
+                            draw_list.add_text(version_x, version_y, version_color, version_text)
+                    else:
+                        # For Source2Viewer: show commit hash, single line on right
+                        version_text = version_lines[0].split(': ')[1] if ': ' in version_lines[0] else version_lines[0]
+                        
+                        # Calculate text width and position on right
+                        text_width = imgui.calc_text_size(version_text).x
+                        version_x = button_max.x - text_width - 8
+                        version_y = button_min.y + (button_height - 10) // 2  # Vertically centered
+                        
+                        # Draw the commit text
+                        draw_list.add_text(version_x, version_y, version_color, version_text)
+                        
+                        # Detect click on commit text to open GitHub commit link
+                        mouse_pos = imgui.get_mouse_pos()
+                        text_height = 10  # Approximate text height with 0.75 scale
+                        if (version_x <= mouse_pos.x <= version_x + text_width and
+                            version_y <= mouse_pos.y <= version_y + text_height):
+                            # Show hand cursor
+                            self.should_show_hand = True
+                            # Check for click
+                            if imgui.is_mouse_clicked(0) and name == 'source2viewer':
+                                # Extract commit hash from version_text
+                                import webbrowser
+                                commit_hash = version_text.strip()
+                                commit_url = f"https://github.com/ValveResourceFormat/ValveResourceFormat/commit/{commit_hash}"
+                                webbrowser.open(commit_url)
+                    
+                    io.font_global_scale = original_scale
             else:
-                # Normal mode: icon on top, text below
-                # Draw icon if available
+                # Non-compact mode: button name at top (bold/larger), icon on left, tooltip text on right
+                
+                # Draw button name at the top (larger, bold-looking by drawing multiple times)
+                title_x = button_min.x + 8
+                title_y = button_min.y + 8
+                
+                if is_disabled:
+                    title_color = imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
+                else:
+                    title_color = imgui.get_color_u32_rgba(1, 1, 1, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.1, 0.1, 0.1, 1)
+                
+                # Use font scaling for larger text
+                io = imgui.get_io()
+                original_scale = io.font_global_scale
+                io.font_global_scale = 1.3  # 30% larger
+                
+                button_title = label.replace('\n', ' ')
+                
+                # Draw title multiple times with slight offsets for bold effect
+                for offset_x in [0, 0.5, 1.0]:
+                    for offset_y in [0, 0.3]:
+                        draw_list.add_text(title_x + offset_x, title_y + offset_y, title_color, button_title)
+                
+                # Restore original font scale
+                io.font_global_scale = original_scale
+                
+                # Draw icon below title on the left
+                content_y_start = button_min.y + 32  # More space for larger title
+                
                 if icon_key and icon_key in self.button_icons:
                     texture = self.button_icons[icon_key]
-                    icon_x = button_min.x + (button_width - icon_size) // 2
-                    icon_y = button_min.y + 15
+                    icon_x = button_min.x + 12
+                    icon_y = content_y_start + (button_height - 28 - icon_size) // 2
                     
                     # Draw icon with reduced alpha if disabled
                     if is_disabled:
@@ -806,24 +1081,100 @@ class ImGuiApp:
                             (icon_x + icon_size, icon_y + icon_size)
                         )
                     
-                    # Draw text below icon
-                    text_y = icon_y + icon_size + 8
-                else:
-                    # No icon, center text vertically
-                    text_y = button_min.y + 45
+                    # Draw tooltip text to the right of icon
+                    tooltip_text = self.get_button_tooltip(name)
+                    if tooltip_text:
+                        text_x = icon_x + icon_size + 8
+                        text_y = content_y_start + 4
+                        
+                        if is_disabled:
+                            text_color = imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
+                        else:
+                            text_color = imgui.get_color_u32_rgba(0.9, 0.9, 0.9, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.2, 0.2, 0.2, 1)
+                        
+                        # Calculate max width for text wrapping (accounting for right padding)
+                        max_text_width = button_max.x - text_x - 12
+                        
+                        # Calculate available vertical space for text (leave room for version info at bottom)
+                        version_space = 28  # Space reserved for version info at bottom
+                        available_height = button_max.y - text_y - version_space
+                        line_height = 13
+                        max_lines = int(available_height / line_height)
+                        
+                        # Simple word wrapping with better handling of long words
+                        words = tooltip_text.split()
+                        lines = []
+                        current_line = ""
+                        
+                        for word in words:
+                            test_line = current_line + (" " if current_line else "") + word
+                            test_width = imgui.calc_text_size(test_line).x
+                            
+                            if test_width <= max_text_width:
+                                current_line = test_line
+                            else:
+                                if current_line:
+                                    lines.append(current_line)
+                                    current_line = word
+                                else:
+                                    # Word is too long, force it and truncate with ellipsis
+                                    while imgui.calc_text_size(word + "...").x > max_text_width and len(word) > 1:
+                                        word = word[:-1]
+                                    lines.append(word + "...")
+                                    current_line = ""
+                        
+                        if current_line:
+                            lines.append(current_line)
+                        
+                        # Draw each line up to max_lines
+                        for i, line in enumerate(lines[:max_lines]):
+                            draw_list.add_text(text_x, text_y + (i * line_height), text_color, line)
                 
-                # Draw button label (centered) - grayed out if disabled
-                if is_disabled:
-                    text_color = imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
-                else:
-                    text_color = imgui.get_color_u32_rgba(1, 1, 1, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.1, 0.1, 0.1, 1)
-                
-                # Split label by newlines for multi-line text
-                lines = label.split('\n')
-                for i, line in enumerate(lines):
-                    text_width = imgui.calc_text_size(line).x
-                    text_x = button_min.x + (button_width - text_width) // 2
-                    draw_list.add_text(text_x, text_y + i * 12, text_color, line)
+                # Draw version info at the bottom right of the button (stacked vertically)
+                version_lines = self.get_button_version(name)
+                if version_lines:
+                    version_line_height = 12
+                    
+                    # Calculate starting Y position based on number of lines
+                    num_lines = len(version_lines)
+                    version_y_start = button_max.y - (num_lines * version_line_height) - 4  # 4px padding from bottom
+                    
+                    # Use smaller, dimmer text for version
+                    if is_disabled:
+                        version_color = imgui.get_color_u32_rgba(0.3, 0.3, 0.3, 1)
+                    else:
+                        version_color = imgui.get_color_u32_rgba(0.6, 0.6, 0.6, 1) if self.dark_mode else imgui.get_color_u32_rgba(0.4, 0.4, 0.4, 1)
+                    
+                    # Use smaller font scale
+                    io.font_global_scale = 0.85
+                    
+                    # Draw each version line aligned to the right
+                    for i, line in enumerate(version_lines):
+                        version_y = version_y_start + (i * version_line_height)
+                        # Replace "KZ:" with "CS2KZ:" for display
+                        display_line = line.replace("KZ:", "CS2KZ:")
+                        # Calculate text width and align to right with 8px padding
+                        text_width = imgui.calc_text_size(display_line).x
+                        version_x = button_max.x - text_width - 8
+                        draw_list.add_text(version_x, version_y, version_color, display_line)
+                        
+                        # For Source2Viewer commit, detect click to open GitHub link
+                        if name == 'source2viewer' and 'Commit:' in line:
+                            mouse_pos = imgui.get_mouse_pos()
+                            text_height = 12  # Approximate text height with 0.85 scale
+                            if (version_x <= mouse_pos.x <= version_x + text_width and
+                                version_y <= mouse_pos.y <= version_y + text_height):
+                                # Show hand cursor
+                                self.should_show_hand = True
+                                # Check for click
+                                if imgui.is_mouse_clicked(0):
+                                    # Extract commit hash from line
+                                    import webbrowser
+                                    commit_hash = line.split('Commit: ')[1].strip()
+                                    commit_url = f"https://github.com/ValveResourceFormat/ValveResourceFormat/commit/{commit_hash}"
+                                    webbrowser.open(commit_url)
+                    
+                    io.font_global_scale = original_scale
         
         # Long-press drag logic (allow even if disabled)
         import time
@@ -882,11 +1233,12 @@ class ImGuiApp:
         imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (8, 6))
         imgui.push_style_var(imgui.STYLE_WINDOW_BORDERSIZE, 0.0)
         
-        # Title bar background color (darker than menu bar)
-        if self.dark_mode:
-            imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, 0.12, 0.12, 0.12, 1.0)
-        else:
-            imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, 0.85, 0.85, 0.85, 1.0)
+        # Title bar background color (slightly darker than window background)
+        theme = self.themes.get(self.current_theme, self.themes['grey'])
+        r, g, b, a = theme['window_bg']
+        # Make title bar slightly darker (multiply by 0.8)
+        title_bg = (r * 0.8, g * 0.8, b * 0.8, a)
+        imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, *title_bg)
         
         flags = (
             imgui.WINDOW_NO_TITLE_BAR |
@@ -902,8 +1254,12 @@ class ImGuiApp:
             imgui.image(self.button_icons["title_icon"], 16, 16)
             imgui.same_line(spacing=4)
         
-        # Title text
+        # Title text with theme color
+        theme = self.themes.get(self.current_theme, self.themes['grey'])
+        text_color = theme['text']
+        imgui.push_style_color(imgui.COLOR_TEXT, *text_color)
         imgui.text(WINDOW_TITLE)
+        imgui.pop_style_color(1)
         
         # Get the position for the buttons (right side)
         button_size = 20
@@ -1070,11 +1426,50 @@ class ImGuiApp:
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
                 
+                imgui.separator()
+                
+                # Assets header (non-clickable)
+                imgui.text("Assets")
+                
+                # AmbientCG
+                if imgui.menu_item("  AmbientCG")[0]:
+                    import webbrowser
+                    webbrowser.open("https://ambientcg.com/")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # Sketchfab
+                if imgui.menu_item("  Sketchfab")[0]:
+                    import webbrowser
+                    webbrowser.open("https://sketchfab.com/search?features=downloadable&type=models")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # Meshes
+                if imgui.menu_item("  Meshes")[0]:
+                    import webbrowser
+                    webbrowser.open("https://www.thebasemesh.com/model-library")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # JP-2499/AgX
+                if imgui.menu_item("  JP-2499/AgX")[0]:
+                    import webbrowser
+                    webbrowser.open("https://codeberg.org/GameChaos/s2-open-domain-lut-generator/releases/tag/jp2499-v1")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
+                # GameBanana
+                if imgui.menu_item("  GameBanana")[0]:
+                    import webbrowser
+                    webbrowser.open("https://gamebanana.com/games/4660")
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                
                 imgui.end_menu()
             
             # Settings menu
-            window_width = self.get_window_width()
-            menu_width = int(window_width * 0.95)  # Keep menu wider but constrain individual items
+            menu_width = 200  # Fixed width for Settings menu
             imgui.push_style_var(imgui.STYLE_ITEM_INNER_SPACING, (0, 4))  # Minimize spacing between text and checkbox in menu items
             imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (2, 12))  # Reduce window padding to fit content
             imgui.set_next_window_size(menu_width, 0)
@@ -1086,14 +1481,23 @@ class ImGuiApp:
                 item_width = min(180, menu_width - 20)
                 imgui.set_next_item_width(item_width)
                 
-                # Dark Mode
-                clicked_theme, new_dark_mode = imgui.menu_item("Dark Mode", None, self.dark_mode)
+                # Theme submenu
+                theme_menu_open = imgui.begin_menu("Theme")
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
-                if clicked_theme:
-                    self.dark_mode = new_dark_mode
-                    self.settings.set('appearance_mode', 'dark' if self.dark_mode else 'light')
-                    self.setup_style()
+                if theme_menu_open:
+                    themes = ['Grey', 'Black', 'White', 'Pink', 'Orange', 'Blue', 'Red', 'Green', 'Yellow']
+                    for theme_name in themes:
+                        theme_key = theme_name.lower()
+                        is_selected = self.current_theme == theme_key
+                        clicked, _ = imgui.menu_item(theme_name, None, is_selected)
+                        if imgui.is_item_hovered():
+                            self.should_show_hand = True
+                        if clicked and not is_selected:
+                            self.current_theme = theme_key
+                            self.settings.set('appearance_mode', theme_key)
+                            self.setup_style()
+                    imgui.end_menu()
                 
                 # Compact Mode
                 imgui.set_next_item_width(item_width)
@@ -1334,16 +1738,17 @@ class ImGuiApp:
             "point_worldtext": ("point_worldtext", "point_worldtext")
         }
         
-        # Render buttons in order, 2 columns or 1 column based on compact mode
+        # Render buttons in order, 3 columns for non-compact or 1 column for compact mode
         col = 0
-        max_cols = 1 if self.compact_mode else 2
+        max_cols = 1 if self.compact_mode else 3
+        spacing_val = BUTTON_SPACING_COMPACT if self.compact_mode else BUTTON_SPACING
         
         for button_name in self.button_order:
             if button_name in button_configs and self.button_visibility.get(button_name, True):
                 label, icon = button_configs[button_name]
                 
                 if col > 0:
-                    imgui.same_line(spacing=BUTTON_SPACING)
+                    imgui.same_line(spacing=spacing_val)
                 
                 if self.render_button(button_name, label, icon):
                     self.handle_button_click(button_name)
@@ -1373,9 +1778,9 @@ class ImGuiApp:
                 button_height = BUTTON_SIZE_COMPACT_HEIGHT
                 icon_size = 24
             else:
-                button_width = BUTTON_SIZE
-                button_height = BUTTON_SIZE
-                icon_size = 56
+                button_width = BUTTON_SIZE_NON_COMPACT_WIDTH
+                button_height = BUTTON_SIZE_NON_COMPACT
+                icon_size = 64
             
             drag_x = mouse_pos.x - button_width // 2
             drag_y = mouse_pos.y - button_height // 2
@@ -1404,22 +1809,21 @@ class ImGuiApp:
                 single_line_label = self.dragged_button_label.replace('\n', ' ')
                 draw_list.add_text(text_x, text_y, text_color, single_line_label)
             else:
-                # Normal mode: icon on top, text below
+                # Non-compact mode: icon on left, text on right (same as stationary buttons)
                 if self.dragged_button_icon and self.dragged_button_icon in self.button_icons:
                     texture = self.button_icons[self.dragged_button_icon]
-                    icon_x = drag_x + (button_width - icon_size) // 2
-                    icon_y = drag_y + 15
+                    icon_x = drag_x + 12
+                    icon_y = drag_y + (button_height - icon_size) // 2
                     draw_list.add_image(texture, (icon_x, icon_y), (icon_x + icon_size, icon_y + icon_size))
-                    text_y = icon_y + icon_size + 8
+                    text_x = icon_x + icon_size + 12
+                    text_y = drag_y + (button_height - 12) // 2
                 else:
-                    text_y = drag_y + 45
+                    text_x = drag_x + 12
+                    text_y = drag_y + (button_height - 12) // 2
                 
-                # Draw label (multi-line)
-                lines = self.dragged_button_label.split('\n')
-                for i, line in enumerate(lines):
-                    text_width = imgui.calc_text_size(line).x
-                    text_x = drag_x + (button_width - text_width) // 2
-                    draw_list.add_text(text_x, text_y + i * 12, text_color, line)
+                # Draw label (single line)
+                single_line_label = self.dragged_button_label.replace('\n', ' ')
+                draw_list.add_text(text_x, text_y, text_color, single_line_label)
         
         # Handle global drag-drop release (swap buttons when mouse is released)
         if imgui.is_mouse_released(0) and self.dragging_button is not None:

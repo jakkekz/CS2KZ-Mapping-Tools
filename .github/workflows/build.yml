@@ -32,6 +32,7 @@ jobs:
             --name=CS2Importer `
             --icon=icons/porting.ico `
             --add-data="icons;icons" `
+            --add-data="scripts;scripts" `
             --add-data="utils;utils" `
             --collect-all imgui `
             --collect-all glfw `

@@ -306,50 +306,52 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 	utl.EnsureFileWritable( "source1import_2uvmateriallist.txt" )
 	global2UVMaterialFile = open( "source1import_2uvmateriallist.txt", "a" )
 
+	# Skip compilation - CS2 Hammer will compile assets when the map is opened
 	# compile materials
 	# adding explicitly since we appear to miss a number of these if we rely on model compilation above to compile all materials refs too, even if we compile models with -f.
-	for mtlfile in mdlmtls :
-		if ( mtlfile.startswith( "-" ) or ( mtlfile == "" ) ):
-			continue
-		else:
-			mtlfile = mtlfile.replace( "/", "\\" )
-			outName = s2contentcsgoimported + "\\" + mtlfile.replace( ".vmt", ".vmat" )
+	# for mtlfile in mdlmtls :
+	# 	if ( mtlfile.startswith( "-" ) or ( mtlfile == "" ) ):
+	# 		continue
+	# 	else:
+	# 		mtlfile = mtlfile.replace( "/", "\\" )
+	# 		outName = s2contentcsgoimported + "\\" + mtlfile.replace( ".vmt", ".vmat" )
+	# 
+	# 	resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
+	# 	try:
+	# 		utl.RunCommand( resCompCmd, errorCallback )
+	# 	except Exception as e:
+	# 		print(f"Warning: Failed to compile material {mtlfile}: {e}")
+	# 		print("Continuing with other materials...")
 
-		resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
-		try:
-			utl.RunCommand( resCompCmd, errorCallback )
-		except Exception as e:
-			print(f"Warning: Failed to compile material {mtlfile}: {e}")
-			print("Continuing with other materials...")
-
+	# Skip compilation - CS2 Hammer will compile assets when the map is opened
 	# compile models
-	for mdlfile in mdlfiles :
-		bForceCompile = False
-		if ( mdlfile.startswith( "-" ) ):
-			continue
-		else:
-			mdlfile = mdlfile.replace( "/", "\\" )
-			outName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", ".vmdl" )
-
-			if ( not os.path.exists( outName ) ):
-				continue
-
-			refsName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", "_refs.txt" )
-			# commenting this out for now, not needed if we're always force compiling
-			bForceCompile = Force2UVsIfRequired( refsName, global2UVMaterials, global2UVMaterialFile )
-
-		# For now just let the map importer script do the compiles
-		# Compile Model ( should compile materials too ). Possibly add -f here when shader changes have happened.
-		if ( bForceCompile ):
-			resCompCmd = "resourcecompiler -retail -nop4 -f -game csgo \"%s\"" % ( outName )
-		else:
-			resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
-
-		try:
-			utl.RunCommand( resCompCmd, errorCallback )
-		except Exception as e:
-			print(f"Warning: Failed to compile model {mdlfile}: {e}")
-			print("Continuing with other models...")
+	# for mdlfile in mdlfiles :
+	# 	bForceCompile = False
+	# 	if ( mdlfile.startswith( "-" ) ):
+	# 		continue
+	# 	else:
+	# 		mdlfile = mdlfile.replace( "/", "\\" )
+	# 		outName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", ".vmdl" )
+	# 
+	# 		if ( not os.path.exists( outName ) ):
+	# 			continue
+	# 
+	# 		refsName = s2contentcsgoimported + "\\" + mdlfile.replace( ".mdl", "_refs.txt" )
+	# 		# commenting this out for now, not needed if we're always force compiling
+	# 		bForceCompile = Force2UVsIfRequired( refsName, global2UVMaterials, global2UVMaterialFile )
+	# 
+	# 	# For now just let the map importer script do the compiles
+	# 	# Compile Model ( should compile materials too ). Possibly add -f here when shader changes have happened.
+	# 	if ( bForceCompile ):
+	# 		resCompCmd = "resourcecompiler -retail -nop4 -f -game csgo \"%s\"" % ( outName )
+	# 	else:
+	# 		resCompCmd = "resourcecompiler -retail -nop4 -game csgo \"%s\"" % ( outName )
+	# 
+	# 	try:
+	# 		utl.RunCommand( resCompCmd, errorCallback )
+	# 	except Exception as e:
+	# 		print(f"Warning: Failed to compile model {mdlfile}: {e}")
+	# 		print("Continuing with other models...")
 
 	# close global 2uv material file
 	global2UVMaterialFile.close()
@@ -392,12 +394,14 @@ def ImportAndCompileMapRefs( refsFile, s2addon, errorCallback ):
 	writeFile.write( newList )
 	writeFile.close()
 
-	compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-	try:
-		utl.RunCommand( compilercmd, errorCallback )
-	except Exception as e:
-		print(f"Warning: Some embedded materials may have failed to compile: {e}")
-		print("Continuing with map import...")
+	# Skip compilation - CS2 Hammer will compile assets when the map is opened
+	# compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+	# try:
+	# 	utl.RunCommand( compilercmd, errorCallback )
+	# except Exception as e:
+	# 	print(f"Warning: Some embedded materials may have failed to compile: {e}")
+	# 	print("Continuing with map import...")
+	print("Skipping asset compilation (will be compiled automatically when opening in Hammer)")
 
 ##########################################################################################################################################
 # Import all models referenced in VMF from pak01
@@ -438,6 +442,8 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 				import_cmd = f"cs_mdl_import -nop4 -i \"{s1gamecsgo}\" -o \"{s2contentcsgoimported}\" \"{model}\""
 				utl.RunCommand(import_cmd, non_aborting_callback)
 				imported_models.append(model)
+				# Print progress after each model
+				print(f"Imported {len(imported_models)} models")
 				
 				# Check if a _refs.txt file was created for this model
 				refs_name = s2contentcsgoimported + "\\" + model.replace(".mdl", "_refs.txt").replace("/", "\\")
@@ -472,34 +478,37 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 			except Exception as e:
 				print(f"Warning: Some model materials may have failed to import: {e}")
 			
-			# Compile the model materials
-			for mtlfile in model_materials:
-				if mtlfile.startswith("-") or mtlfile == "":
-					continue
-				try:
-					mtlfile = mtlfile.replace("/", "\\")
-					outName = s2contentcsgoimported + "\\" + mtlfile.replace(".vmt", ".vmat")
-					if os.path.exists(outName):
-						resCompCmd = f"resourcecompiler -retail -nop4 -game csgo \"{outName}\""
-						utl.RunCommand(resCompCmd, non_aborting_callback)
-				except Exception as e:
-					pass  # Continue with other materials
+			# Skip compilation - CS2 Hammer will compile assets when the map is opened
+			# for mtlfile in model_materials:
+			# 	if mtlfile.startswith("-") or mtlfile == "":
+			# 		continue
+			# 	try:
+			# 		mtlfile = mtlfile.replace("/", "\\")
+			# 		outName = s2contentcsgoimported + "\\" + mtlfile.replace(".vmt", ".vmat")
+			# 		if os.path.exists(outName):
+			# 			resCompCmd = f"resourcecompiler -retail -nop4 -game csgo \"{outName}\""
+			# 			utl.RunCommand(resCompCmd, non_aborting_callback)
+			# 	except Exception as e:
+			# 		pass  # Continue with other materials
 			
-			print(f"Compiled {len(model_materials)} model materials")
+			print(f"Imported {len(model_materials)} model materials (skipping compilation)")
 		
-		# Compile the successfully imported models
+		# Skip compilation - CS2 Hammer will compile assets when the map is opened
+		# if imported_models:
+		# 	print(f"Compiling {len(imported_models)} imported models...")
+		# 	for model in imported_models:
+		# 		try:
+		# 			vmdl_path = s2contentcsgoimported + "\\" + model.replace(".mdl", ".vmdl").replace("/", "\\")
+		# 			if os.path.exists(vmdl_path):
+		# 				compile_cmd = f"resourcecompiler -retail -nop4 -game csgo \"{vmdl_path}\""
+		# 				utl.RunCommand(compile_cmd, non_aborting_callback)
+		# 		except Exception as e:
+		# 			pass  # Continue with other models
+		# 	
+		# 	print(f"Finished compiling models from pak01")
+		
 		if imported_models:
-			print(f"Compiling {len(imported_models)} imported models...")
-			for model in imported_models:
-				try:
-					vmdl_path = s2contentcsgoimported + "\\" + model.replace(".mdl", ".vmdl").replace("/", "\\")
-					if os.path.exists(vmdl_path):
-						compile_cmd = f"resourcecompiler -retail -nop4 -game csgo \"{vmdl_path}\""
-						utl.RunCommand(compile_cmd, non_aborting_callback)
-				except Exception as e:
-					pass  # Continue with other models
-			
-			print(f"Finished compiling models from pak01")
+			print(f"Imported {len(imported_models)} models (skipping compilation)")
 		
 	except Exception as e:
 		print(f"Warning: VMF model import failed: {e}")
@@ -547,28 +556,32 @@ def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, err
 				import_cmd = f"source1import -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -src1contentdir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo \"materials/{material}.vmt\""
 				utl.RunCommand(import_cmd, material_error_callback)
 				imported_materials.append(material)
+				# Print progress after each material
+				print(f"Imported {len(imported_materials)} materials")
 			except Exception as e:
 				print(f"Warning: Failed to import material {material}: {e}")
 				failed_count += 1
 		
 		print(f"Imported {len(imported_materials)} materials, {failed_count} failed")
 		
-		# Compile only the successfully imported materials
-		compile_refs = ""
-		for material in imported_materials:
-			compile_refs += f"{s2contentcsgoimported}\\materials\\{material}.vmat\n"
+		# Skip compilation - CS2 Hammer will compile assets when the map is opened
+		# compile_refs = ""
+		# for material in imported_materials:
+		# 	compile_refs += f"{s2contentcsgoimported}\\materials\\{material}.vmat\n"
+		# 
+		# compile_file = vmf_path.replace('.vmf', '_vmf_materials_compile_refs.txt')
+		# with open(compile_file, 'w') as f:
+		# 	f.write(compile_refs)
+		# 
+		# compile_cmd = f"resourcecompiler -retail -nop4 -game csgo -f -filelist \"{compile_file}\""
+		# try:
+		# 	utl.RunCommand(compile_cmd, material_error_callback)  # Use non-aborting callback
+		# 	print(f"Successfully compiled {len(imported_materials)} imported materials")
+		# except Exception as e:
+		# 	print(f"Warning: Some VMF materials may have failed to compile: {e}")
+		# 	print("Continuing with VMF import...")
 		
-		compile_file = vmf_path.replace('.vmf', '_vmf_materials_compile_refs.txt')
-		with open(compile_file, 'w') as f:
-			f.write(compile_refs)
-		
-		compile_cmd = f"resourcecompiler -retail -nop4 -game csgo -f -filelist \"{compile_file}\""
-		try:
-			utl.RunCommand(compile_cmd, material_error_callback)  # Use non-aborting callback
-			print(f"Successfully compiled {len(imported_materials)} imported materials")
-		except Exception as e:
-			print(f"Warning: Some VMF materials may have failed to compile: {e}")
-			print("Continuing with VMF import...")
+		print("Skipping material compilation (will be compiled automatically when opening in Hammer)")
 		
 		# Return set of imported material paths for deduplication
 		return set(imported_materials)
@@ -765,8 +778,10 @@ try:
 			writeFile.write( newList )
 			writeFile.close()
 			
-		compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
-		utl.RunCommand( compilercmd, errorCallback )
+		# Skip compilation - CS2 Hammer will compile assets when the map is opened
+		# compilercmd = "resourcecompiler -retail -nop4 -game csgo -f -filelist \"" + tmpFile + "\""
+		# utl.RunCommand( compilercmd, errorCallback )
+		print("Skipping embedded material compilation (will be compiled automatically when opening in Hammer)")
 		
 		print("Re-importing VMF to update with compiled embedded materials...")
 		try:

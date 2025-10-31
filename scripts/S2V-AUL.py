@@ -174,6 +174,30 @@ def download_and_install(new_version):
             except Exception as e:
                 print(f"Warning: Could not remove XML file {XML_FILE_TO_DELETE}. {e}")
 
+        # Save version info to file for display in GUI
+        version_file = os.path.join(INSTALL_DIR, 'cs2kz_versions.txt')
+        try:
+            # Read existing versions
+            versions = {}
+            if os.path.exists(version_file):
+                with open(version_file, 'r') as f:
+                    for line in f:
+                        if '=' in line:
+                            key, value = line.strip().split('=', 1)
+                            versions[key] = value
+            
+            # Update Source2Viewer version
+            versions['source2viewer'] = new_version
+            
+            # Write back all versions
+            with open(version_file, 'w') as f:
+                for key, value in versions.items():
+                    f.write(f"{key}={value}\n")
+            
+            print(f"Saved Source2Viewer version: {new_version}")
+        except Exception as e:
+            print(f"Warning: Could not save version info: {e}")
+
         print("Update complete!")
         return True
 

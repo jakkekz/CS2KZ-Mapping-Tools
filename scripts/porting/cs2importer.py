@@ -56,9 +56,30 @@ class CS2ImporterApp:
         # Import state tracking
         self.import_in_progress = False
         self.import_completed = False
+        self.progress_spinner = 0.0  # For animated progress indicator
+        
+        # Progress tracking
+        self.total_materials = 0
+        self.imported_materials = 0
+        self.total_models = 0
+        self.imported_models = 0
+        self.total_vmaps = 0
+        self.imported_vmaps = 0
+        self.vmap_done = False
+        self.current_stage = ""  # Current import stage description
+        self.total_compiled_assets = 0
+        self.compiled_assets = 0
+        self.current_compiling_asset = ""
+        
+        # Failed asset tracking
+        self.failed_materials = []
+        self.failed_models = []
+        self.failed_count = 0
         
         # Console output
         self.console_output = []
+        self.bspsrc_output = []  # Separate storage for BSPSrc extraction output
+        self.in_bspsrc_extraction = False  # Flag to track if we're doing BSPSrc extraction
         self.last_console_line_count = 0  # Track for auto-scroll
         
         # Prerequisites visibility (closed by default)
@@ -66,9 +87,10 @@ class CS2ImporterApp:
         self.prerequisites_height = 0  # Track prerequisites section height
         
         # Window dimensions
-        self.base_window_height = 310  # Compact base height with room for freeze text
-        self.console_height = 640  # Additional height when console is shown
-        self.prerequisites_expanded_height = 320  # Reduced height (fewer steps with automation)
+        self.base_window_height = 280  # Base height for main UI (increased to add space under GO button)
+        self.progress_tracking_height = 150  # Height added when showing progress tracking
+        self.completed_height = 35  # Height added when import completes (for failed assets section if needed)
+        self.prerequisites_expanded_height = 350  # Height for prerequisites section (increased to prevent GO button cutoff)
         
         # Cursor state
         self.text_input_hovered = False
@@ -83,9 +105,105 @@ class CS2ImporterApp:
         self.auto_detect_cs2()
     
     def log(self, message):
-        """Add message to console output"""
-        self.console_output.append(str(message))
+        """Add message to console output and parse for progress tracking"""
+        msg = str(message)
+        self.console_output.append(msg)
+        
+        # Also store BSPSrc extraction output separately
+        if self.in_bspsrc_extraction:
+            self.bspsrc_output.append(msg)
+        
         print(message)  # Also print to actual console
+        
+        # Parse message for progress tracking
+        msg = str(message)
+        import re  # Import re at the top for all pattern matching
+        
+        # Track total materials found
+        if "unique material references in VMF" in msg:
+            match = re.search(r'Found (\d+) unique material references', msg)
+            if match:
+                self.total_materials = int(match.group(1))
+                self.current_stage = "Importing materials..."
+        
+        # Track material imports (including failed count)
+        elif "Imported" in msg and "materials" in msg:
+            match = re.search(r'Imported (\d+) materials', msg)
+            if match:
+                self.imported_materials = int(match.group(1))
+            # Parse failed count from final summary
+            if "failed" in msg:
+                failed_match = re.search(r'(\d+) failed', msg)
+                if failed_match:
+                    self.failed_count += int(failed_match.group(1))
+        
+        # Track failed material imports
+        elif "Failed to import material" in msg or "Warning: Material import command failed" in msg:
+            # Try to extract material name from the message
+            material_match = re.search(r'material ([^\s:]+)', msg)
+            if material_match:
+                material_name = material_match.group(1)
+                if material_name not in self.failed_materials:
+                    self.failed_materials.append(material_name)
+        
+        # Track total models found
+        elif "unique model references in VMF" in msg:
+            match = re.search(r'Found (\d+) unique model references', msg)
+            if match:
+                self.total_models = int(match.group(1))
+                self.current_stage = "Importing models..."
+        
+        # Track model imports (including failed count)
+        elif "Imported" in msg and "models" in msg:
+            match = re.search(r'Imported (\d+) models', msg)
+            if match:
+                self.imported_models = int(match.group(1))
+            # Parse skipped/failed count from summary
+            if "skipped/failed" in msg:
+                failed_match = re.search(r'(\d+) skipped/failed', msg)
+                if failed_match:
+                    self.failed_count += int(failed_match.group(1))
+        
+        # Track VMF import stages
+        elif "Starting VMF import" in msg:
+            self.current_stage = "Converting VMF to VMAP..."
+        # Skip compilation tracking - we're no longer compiling assets
+        # elif "Running Command: resourcecompiler" in msg:
+        #     self.current_stage = "Compiling assets..."
+        #     self.current_compiling_asset = ""
+        # elif re.match(r"\s*\+- .*(\.vmat|\.vtex|\.vmdl)", msg):
+        #     self.compiled_assets += 1
+        #     asset_match = re.search(r"\+- (.*)", msg)
+        #     if asset_match:
+        #         self.current_compiling_asset = asset_match.group(1)
+        # elif re.match(r"\s*OK: ", msg):
+        #     self.current_compiling_asset = ""
+        # elif "Successfully compiled" in msg and "imported materials" in msg:
+        #     self.current_stage = "Compiling materials..."
+        # elif "Compiled" in msg and "model materials" in msg:
+        #     self.current_stage = "Compiling model materials..."
+        # elif "Compiling" in msg and "imported models" in msg:
+        #     self.current_stage = "Compiling models..."
+        # elif "Finished compiling models from pak01" in msg:
+        #     self.current_stage = "Finalizing models..."
+        elif "Skipping" in msg and "compilation" in msg:
+            self.current_stage = "Skipping asset compilation..."
+        elif "Found" in msg and "VMAP files to move" in msg:
+            import re
+            match = re.search(r'Found (\d+) VMAP files', msg)
+            if match:
+                self.total_vmaps = int(match.group(1))
+                self.imported_vmaps = 0  # Reset counter
+                self.current_stage = "Moving VMAP files..."
+        elif "-> Moved" in msg and ".vmap" in msg:
+            self.imported_vmaps += 1
+        elif "Successfully imported VMF to VMAP" in msg:
+            self.vmap_done = True
+            self.current_stage = "Processing VMAP files..."
+        elif "VMF import process completed" in msg:
+            self.current_stage = "Finalizing import..."
+        elif "Import complete!" in msg:
+            self.current_stage = "Complete!"
     
     def copy_to_clipboard(self, text):
         """Copy text to clipboard using tkinter"""
@@ -99,6 +217,110 @@ class CS2ImporterApp:
             self.log("✓ Console output copied to clipboard")
         except Exception as e:
             self.log(f"Error copying to clipboard: {e}")
+    
+    def open_log_file(self):
+        """Save console output to log file and open it"""
+        try:
+            # Get logs folder path
+            temp_folder = os.path.join(tempfile.gettempdir(), ".CS2KZ-mapping-tools")
+            logs_folder = os.path.join(temp_folder, "logs")
+            os.makedirs(logs_folder, exist_ok=True)
+            
+            # Create log filename with timestamp
+            import datetime
+            import glob
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_filename = f"cs2_import_log_{timestamp}.txt"
+            log_path = os.path.join(logs_folder, log_filename)
+            
+            # Clean up old logs - keep only 5 most recent
+            existing_logs = sorted(glob.glob(os.path.join(logs_folder, "cs2_import_log_*.txt")))
+            if len(existing_logs) >= 5:
+                # Remove oldest logs to keep only 4 (so with the new one we'll have 5)
+                for old_log in existing_logs[:-4]:
+                    try:
+                        os.remove(old_log)
+                    except Exception:
+                        pass  # Ignore errors removing old logs
+            
+            # Write console output to file
+            with open(log_path, 'w', encoding='utf-8') as f:
+                f.write("=" * 80 + "\n")
+                f.write("CS2 Map Import Log\n")
+                f.write(f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 80 + "\n\n")
+                
+                # Write BSPSrc extraction section (if any)
+                if self.bspsrc_output:
+                    f.write("BSP EXTRACTION\n")
+                    f.write("-" * 80 + "\n")
+                    for line in self.bspsrc_output:
+                        f.write(line + "\n")
+                    f.write("\n")
+                
+                # Write import summary
+                f.write("IMPORT SUMMARY\n")
+                f.write("-" * 80 + "\n")
+                f.write(f"Materials: {self.imported_materials}/{self.total_materials}\n")
+                f.write(f"Models: {self.imported_models}/{self.total_models}\n")
+                f.write(f"VMAP: {'Complete' if self.vmap_done else 'Incomplete'}\n")
+                f.write(f"Failed Assets: {self.failed_count}\n")
+                f.write("\n")
+                
+                # Write failed assets if any
+                if self.failed_materials or self.failed_models:
+                    f.write("FAILED ASSETS\n")
+                    f.write("-" * 80 + "\n")
+                    if self.failed_materials:
+                        f.write(f"Failed Materials ({len(self.failed_materials)}):\n")
+                        for material in self.failed_materials:
+                            f.write(f"  - {material}\n")
+                        f.write("\n")
+                    if self.failed_models:
+                        f.write(f"Failed Models ({len(self.failed_models)}):\n")
+                        for model in self.failed_models:
+                            f.write(f"  - {model}\n")
+                        f.write("\n")
+                
+                # Write CS2 import output (all console output except BSPSrc)
+                f.write("CS2 IMPORT OUTPUT\n")
+                f.write("-" * 80 + "\n")
+                for line in self.console_output:
+                    # Skip BSPSrc lines (they're already written above)
+                    if line not in self.bspsrc_output:
+                        f.write(line + "\n")
+            
+            # Open the file with default text editor
+            os.startfile(log_path)
+            self.log(f"✓ Log saved to {log_path}")
+            
+        except Exception as e:
+            self.log(f"Error opening log file: {e}")
+    
+    def open_addon_folder(self):
+        """Open the addon folder in Windows Explorer"""
+        try:
+            if not self.csgo_basefolder:
+                self.log("Error: CS2 path not detected")
+                return
+            
+            if not self.addon:
+                self.log("Error: Addon name not specified")
+                return
+            
+            # Construct the content addon path
+            # csgo_basefolder is like "C:/Program Files/Steam/steamapps/common/Counter-Strike Global Offensive"
+            addon_path = os.path.join(self.csgo_basefolder, 'content', 'csgo_addons', self.addon)
+            addon_path = addon_path.replace("/", "\\")
+            
+            if os.path.exists(addon_path):
+                os.startfile(addon_path)
+                self.log(f"✓ Opened addon folder: {addon_path}")
+            else:
+                self.log(f"Error: Addon folder not found at {addon_path}")
+                
+        except Exception as e:
+            self.log(f"Error opening addon folder: {e}")
     
     def init_window(self):
         """Initialize GLFW window and ImGui"""
@@ -316,6 +538,9 @@ viewsettings
     def extract_bsp(self, bsp_path):
         """Extract BSP file using BSPSource"""
         try:
+            # Mark that we're starting BSPSrc extraction
+            self.in_bspsrc_extraction = True
+            
             if not self.csgo_basefolder:
                 self.log("CS:GO folder not set")
                 return False
@@ -553,6 +778,7 @@ viewsettings
                 if os.path.exists(csgo_vmf):
                     self.log(f"✓ VMF found at: {csgo_vmf}")
                     self.log("✓ Extraction completed successfully")
+                    self.in_bspsrc_extraction = False  # End BSPSrc extraction tracking
                     return True
                 else:
                     # Check if embedded files were at least extracted
@@ -564,13 +790,16 @@ viewsettings
                     else:
                         self.log("✗ VMF not found. BSP may be corrupt or CS2 format.")
                         self.log("✗ Note: This tool only works with CS:GO/Source 1 BSP files.")
+                    self.in_bspsrc_extraction = False  # End BSPSrc extraction tracking
                     return False
                 
         except subprocess.TimeoutExpired:
             self.log("Extraction timed out (took more than 2 minutes)")
+            self.in_bspsrc_extraction = False  # End BSPSrc extraction tracking
             return False
         except Exception as e:
             self.log(f"Error during extraction: {e}")
+            self.in_bspsrc_extraction = False  # End BSPSrc extraction tracking
             return False
         
         # Save the folder path for next time
@@ -656,6 +885,22 @@ viewsettings
             self.import_completed = False
             self.console_output = []  # Clear previous output
             
+            # Reset progress tracking
+            self.total_materials = 0
+            self.imported_materials = 0
+            self.total_models = 0
+            self.imported_models = 0
+            self.total_vmaps = 0
+            self.imported_vmaps = 0
+            self.vmap_done = False
+            self.current_stage = "Starting import..."
+            self.failed_materials = []
+            self.failed_models = []
+            self.failed_count = 0
+            self.total_compiled_assets = 0
+            self.compiled_assets = 0
+            self.current_compiling_asset = ""
+            
             self.save_to_cfg()
 
             cd = os.path.join(self.csgo_basefolder, 'game', 'csgo', 'import_scripts').replace("/", "\\")
@@ -691,9 +936,9 @@ viewsettings
                 env=env
             )
             
-            # Read output line by line in real-time
+            # Read output and wait for process in a background thread
             import threading
-            def read_output():
+            def run_process():
                 try:
                     while True:
                         line = process.stdout.readline()
@@ -702,23 +947,26 @@ viewsettings
                         line = line.rstrip()
                         if line:
                             self.log(line)
+                    
+                    # Wait for process to complete
+                    process.wait()
+                    self.log("Import process completed.")
+                    
+                    # Update import state
+                    self.import_in_progress = False
+                    self.import_completed = True
+                    
+                    # Show done popup
+                    self.show_done_popup = True
+                    
                 except Exception as e:
-                    self.log(f"Output read error: {e}")
+                    self.log(f"Process error: {e}")
+                    self.import_in_progress = False
             
-            output_thread = threading.Thread(target=read_output, daemon=True)
-            output_thread.start()
+            process_thread = threading.Thread(target=run_process, daemon=True)
+            process_thread.start()
             
-            # Wait for process to complete
-            process.wait()
-            output_thread.join(timeout=2)  # Wait up to 2 seconds for output thread
-            self.log("Import process completed.")
-            
-            # Update import state
-            self.import_in_progress = False
-            self.import_completed = True
-            
-            # Show done popup
-            self.show_done_popup = True
+            # Don't wait here - let the GUI remain responsive
 
         except Exception as e:
             self.log(f"Error: {e}")
@@ -857,15 +1105,18 @@ viewsettings
         # Read Before Import Section
         prerequisites_opened = imgui.collapsing_header("Read Before Import")[0]
         
-        # Dynamically resize window based on prerequisites and console state
+        # Dynamically resize window based on prerequisites, progress tracking, and completed state
         current_height = self.base_window_height
         current_width = 275
         if prerequisites_opened:
             current_height += self.prerequisites_expanded_height
             current_width = 400  # Slightly wider for prerequisites text
+        if self.import_in_progress:
+            current_height += self.progress_tracking_height
+            current_width = max(current_width, 345)  # Ensure wide enough for progress bar
         if self.import_completed:
-            current_height += self.console_height
-            current_width = 600  # Wider for console
+            current_height += self.completed_height
+            current_width = max(current_width, 345)  # Enough for Copy All button and stats
         
         current_window_size = glfw.get_window_size(self.window)
         
@@ -882,7 +1133,6 @@ viewsettings
             
             imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.6, 0.6, 1.0)  # Light red
             imgui.bullet_text("Doesnt port toolsskybox")
-            imgui.bullet_text("Might be a bit slower than the valve script")
             imgui.pop_style_color()
             
             imgui.spacing()
@@ -930,6 +1180,13 @@ viewsettings
             imgui.text_wrapped("4. GO!")
             imgui.pop_style_color()
             
+            imgui.spacing()
+            
+            # Step 5
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
+            imgui.text_wrapped("5. \"Create New Addon\" in Hammer Main Menu")
+            imgui.pop_style_color()
+            
             imgui.pop_text_wrap_pos()
             imgui.spacing()
             imgui.separator()
@@ -964,44 +1221,108 @@ viewsettings
             imgui.spacing()
             imgui.spacing()
         
-        # GO Button
-        imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.7, 0.2, 1.0)  # Green
-        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.8, 0.3, 1.0)  # Lighter green
-        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.6, 0.15, 1.0)  # Darker green
+        # GO Button (only show if import hasn't completed)
+        if not self.import_completed:
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.7, 0.2, 1.0)  # Green
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.8, 0.3, 1.0)  # Lighter green
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.6, 0.15, 1.0)  # Darker green
+            
+            # Disable button while import is in progress
+            if self.import_in_progress:
+                imgui.push_style_var(imgui.STYLE_ALPHA, 0.5)
+            
+            button_clicked = imgui.button("GO!", width=60, height=40)
+            
+            if self.import_in_progress:
+                imgui.pop_style_var(1)
+            
+            if button_clicked and not self.import_in_progress:
+                self.go()
+            
+            imgui.pop_style_color(3)
         
-        # Disable button while import is in progress
+        # Show progress bar while import is in progress
         if self.import_in_progress:
-            imgui.push_style_var(imgui.STYLE_ALPHA, 0.5)
+            imgui.spacing()
+            imgui.separator()
+            imgui.spacing()
+            
+            # Calculate overall progress
+            # Don't count VMAPs in total until we know how many there are
+            total_items = self.total_materials + self.total_models
+            completed_items = self.imported_materials + self.imported_models
+            
+            # Add VMAPs to calculation if we know the count
+            if self.total_vmaps > 0:
+                total_items += self.total_vmaps
+                completed_items += self.imported_vmaps
+            
+            progress = 0.0
+            if total_items > 0:
+                progress = completed_items / total_items
+            
+            # Display current stage
+            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.8, 0.0, 1.0)  # Yellow
+            imgui.text(self.current_stage)
+            imgui.pop_style_color()
+            
+            # Progress bar
+            imgui.push_style_color(imgui.COLOR_PLOT_HISTOGRAM, 0.2, 0.8, 0.2, 1.0)  # Green
+            imgui.progress_bar(progress, (250, 0), f"{int(progress * 100)}%")
+            imgui.pop_style_color()
+            
+            # Details
+            imgui.set_window_font_scale(0.85)
+            if self.total_materials > 0:
+                imgui.text(f"Materials: {self.imported_materials}/{self.total_materials}")
+            if self.total_models > 0:
+                imgui.text(f"Models: {self.imported_models}/{self.total_models}")
+            if self.total_vmaps > 0:
+                imgui.text(f"VMAPs: {self.imported_vmaps}/{self.total_vmaps}")
+            elif self.vmap_done:
+                imgui.text("VMAP: ✓ Complete")
+            imgui.set_window_font_scale(1.0)
         
-        button_clicked = imgui.button("GO!", width=100, height=40)
-        
-        if self.import_in_progress:
-            imgui.pop_style_var(1)
-        
-        if button_clicked and not self.import_in_progress:
-            self.go()
-        
-        imgui.pop_style_color(3)
-        
-        # Copy All button (only show after import is completed)
+        # Open Log button (only show after import is completed)
         if self.import_completed:
-            imgui.same_line()
+            imgui.spacing()
+            imgui.separator()
+            imgui.spacing()
+            
             imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.5, 0.8, 1.0)  # Blue
             imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.6, 0.9, 1.0)  # Lighter blue
             imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.4, 0.7, 1.0)  # Darker blue
             
-            if imgui.button("Copy All", width=100, height=40):
-                # Copy console output to clipboard
-                console_text = "\n".join(self.console_output)
-                self.copy_to_clipboard(console_text)
+            if imgui.button("Open Log", width=75, height=40):
+                self.open_log_file()
             
             imgui.pop_style_color(3)
-        
-        # Note about window freezing
-        if not self.import_in_progress and not self.import_completed:
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Grey
-            imgui.text("(Window will freeze during import)")
+            
+            # Open Addon button
+            imgui.same_line()
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.8, 0.7, 0.2, 1.0)  # Yellow
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.9, 0.8, 0.3, 1.0)  # Lighter yellow
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.7, 0.6, 0.15, 1.0)  # Darker yellow
+            
+            if imgui.button("Open Addon", width=85, height=40):
+                self.open_addon_folder()
+            
+            imgui.pop_style_color(3)
+            
+            # Display import stats to the right of Open Log button
+            imgui.same_line()
+            imgui.begin_group()
+            imgui.set_window_font_scale(1)
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Grey text
+            imgui.text(f"Materials: {self.imported_materials}/{self.total_materials}")
+            imgui.text(f"Models: {self.imported_models}/{self.total_models}")
+            if self.total_vmaps > 0:
+                imgui.text(f"VMAPs: {self.imported_vmaps}/{self.total_vmaps}")
+            elif self.vmap_done:
+                imgui.text("VMAP: ✓")
             imgui.pop_style_color()
+            imgui.set_window_font_scale(1.0)
+            imgui.end_group()
         
         # Show "wait..." text during import
         if self.import_in_progress:
@@ -1016,28 +1337,37 @@ viewsettings
             imgui.separator()
             imgui.spacing()
             
-            # Console Output
-            imgui.text("Console Output:")
-            
-            # Check if new content was added
-            current_line_count = len(self.console_output)
-            should_scroll = current_line_count > self.last_console_line_count
-            self.last_console_line_count = current_line_count
-            
-            # Use a child window with scrollbars for console output
-            imgui.push_style_color(imgui.COLOR_CHILD_BACKGROUND, 0.1, 0.1, 0.1, 1.0)
-            imgui.begin_child("console_region", 0, 600, True, imgui.WINDOW_HORIZONTAL_SCROLLING_BAR)
-            
-            # Render each line as selectable text (allows copy with ctrl+c)
-            for line in self.console_output:
-                imgui.selectable(line, False)
-            
-            # Auto-scroll to bottom when new content is added
-            if should_scroll:
-                imgui.set_scroll_here_y(1.0)  # 1.0 = bottom
-            
-            imgui.end_child()
-            imgui.pop_style_color()
+            # Failed Assets section (if any failures)
+            if self.failed_count > 0 or self.failed_materials or self.failed_models:
+                failed_opened = imgui.collapsing_header(f"Failed Assets ({self.failed_count} total)")[0]
+                if failed_opened:
+                    imgui.push_style_color(imgui.COLOR_CHILD_BACKGROUND, 0.15, 0.1, 0.1, 1.0)  # Dark red background
+                    imgui.begin_child("failed_assets_region", 0, 100, True)
+                    
+                    if self.failed_materials:
+                        imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.6, 0.6, 1.0)  # Light red
+                        imgui.text(f"Failed Materials ({len(self.failed_materials)}):")
+                        imgui.pop_style_color()
+                        imgui.set_window_font_scale(0.85)
+                        for material in self.failed_materials:
+                            imgui.bullet_text(material)
+                        imgui.set_window_font_scale(1.0)
+                        imgui.spacing()
+                    
+                    if self.failed_models:
+                        imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.6, 0.6, 1.0)  # Light red
+                        imgui.text(f"Failed Models ({len(self.failed_models)}):")
+                        imgui.pop_style_color()
+                        imgui.set_window_font_scale(0.85)
+                        for model in self.failed_models:
+                            imgui.bullet_text(model)
+                        imgui.set_window_font_scale(1.0)
+                    
+                    imgui.end_child()
+                    imgui.pop_style_color()
+                    imgui.spacing()
+                    imgui.separator()
+                    imgui.spacing()
         
         imgui.end()
         
