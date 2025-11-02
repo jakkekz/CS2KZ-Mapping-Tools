@@ -141,6 +141,14 @@ def get_local_version():
 
 def download_and_install(new_version):
     print(f"\n--- Starting Update to Version {new_version} ---")
+    
+    # Create download flag file
+    download_flag = os.path.join(BASE_PATH, '.s2v_downloading')
+    try:
+        with open(download_flag, 'w') as f:
+            f.write('1')
+    except:
+        pass
 
     try:
         print(f"Downloading build from {DOWNLOAD_URL}...")
@@ -199,16 +207,46 @@ def download_and_install(new_version):
             print(f"Warning: Could not save version info: {e}")
 
         print("Update complete!")
+        
+        # Remove download flag on success
+        download_flag = os.path.join(BASE_PATH, '.s2v_downloading')
+        try:
+            if os.path.exists(download_flag):
+                os.remove(download_flag)
+        except:
+            pass
+        
         return True
 
     except requests.exceptions.RequestException as e:
         print(f"ERROR during download: {e}")
+        # Remove download flag on error
+        download_flag = os.path.join(BASE_PATH, '.s2v_downloading')
+        try:
+            if os.path.exists(download_flag):
+                os.remove(download_flag)
+        except:
+            pass
         return False
     except zipfile.BadZipFile:
         print("ERROR: Downloaded file is not a valid ZIP archive.")
+        # Remove download flag on error
+        download_flag = os.path.join(BASE_PATH, '.s2v_downloading')
+        try:
+            if os.path.exists(download_flag):
+                os.remove(download_flag)
+        except:
+            pass
         return False
     except Exception as e:
         print(f"An unexpected error occurred during installation: {e}")
+        # Remove download flag on error
+        download_flag = os.path.join(BASE_PATH, '.s2v_downloading')
+        try:
+            if os.path.exists(download_flag):
+                os.remove(download_flag)
+        except:
+            pass
         return False
 
 def launch_app():

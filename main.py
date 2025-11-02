@@ -14,6 +14,7 @@ import subprocess
 import psutil
 import shutil
 import threading
+import tempfile
 from scripts.settings_manager import SettingsManager
 
 # Helper function for PyInstaller to find bundled files
@@ -139,6 +140,9 @@ class ImGuiApp:
         self.cs2_client_running = False  # Client (insecure/listen/mapping)
         self.cs2_dedicated_running = False  # Dedicated server
         
+        # Source2Viewer download state
+        self.s2v_downloading = False
+        
         # Cursor state
         self.current_cursor = None
         self.should_show_hand = False
@@ -189,6 +193,13 @@ class ImGuiApp:
             pass
         
         return client_running, dedicated_running
+    
+    def check_s2v_download_status(self):
+        """Check if Source2Viewer is currently downloading"""
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        download_flag = os.path.join(app_dir, '.s2v_downloading')
+        return os.path.exists(download_flag)
     
     def clear_settings(self):
         """Clear saved settings and reset to defaults"""
@@ -471,12 +482,17 @@ class ImGuiApp:
             cs2kz = self.format_version(versions.get('cs2kz', 'N/A'))
             return [f"KZ: {cs2kz}", f"MM: {metamod}"]  # KZ first, then MM
         elif name == 'source2viewer':
+            # Check if currently downloading
+            if self.check_s2v_download_status():
+                return ["wait..."] if self.compact_mode else ["Downloading..."]
+            
             # Check if Source2Viewer.exe exists and is a valid file (not just empty/corrupt)
             s2v_path = os.path.join(app_dir, 'Source2Viewer.exe')
             
             # Check if file exists and has non-zero size
             if not os.path.exists(s2v_path) or os.path.getsize(s2v_path) < 1000:
-                return ["Not installed"]
+                # Use shorter text in compact mode to prevent overlap
+                return ["X"] if self.compact_mode else ["Not installed"]
             
             # Check if we have a saved commit version
             s2v_version = versions.get('source2viewer', None)

@@ -34,6 +34,7 @@ jobs:
             --add-data="icons;icons" `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
+            --add-data="fonts;fonts" `
             --collect-all imgui `
             --collect-all glfw `
             --collect-all OpenGL `
@@ -94,6 +95,8 @@ jobs:
             --add-data="icons;icons" `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
+            --add-data="chars;chars" `
+            --add-data="fonts;fonts" `
             --add-data="gui_tools;gui_tools" `
             --collect-all imgui `
             --collect-all glfw `
