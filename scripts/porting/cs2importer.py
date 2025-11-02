@@ -99,8 +99,8 @@ class CS2ImporterApp:
         # Window dimensions
         self.base_window_height = 290  # Base height for main UI (increased to add space under GO button)
         self.progress_tracking_height = 150  # Height added when showing progress tracking
-        self.completed_height = 50  # Height added when import completes (for failed assets section if needed)
-        self.prerequisites_expanded_height = 370  # Height for prerequisites section (increased to prevent GO button cutoff)
+        self.completed_height = 100  # Height added when import completes (for failed assets section if needed)
+        self.prerequisites_expanded_height = 395  # Height for prerequisites section (increased to prevent GO button cutoff)
         
         # Cursor state
         self.text_input_hovered = False
@@ -1200,7 +1200,8 @@ viewsettings
             
             # Step 5
             imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
-            imgui.text_wrapped("5. \"Create New Addon\" in Hammer Main Menu")
+            imgui.text_wrapped("5. \"Create New Addon\" in the Hammer Main Menu")
+            imgui.text("     with the same addon name you specified")
             imgui.pop_style_color()
             
             imgui.pop_text_wrap_pos()
@@ -1237,25 +1238,24 @@ viewsettings
             imgui.spacing()
             imgui.spacing()
         
-        # GO Button (only show if import hasn't completed)
-        if not self.import_completed:
-            imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.7, 0.2, 1.0)  # Green
-            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.8, 0.3, 1.0)  # Lighter green
-            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.6, 0.15, 1.0)  # Darker green
-            
-            # Disable button while import is in progress
-            if self.import_in_progress:
-                imgui.push_style_var(imgui.STYLE_ALPHA, 0.5)
-            
-            button_clicked = imgui.button("GO!", width=60, height=40)
-            
-            if self.import_in_progress:
-                imgui.pop_style_var(1)
-            
-            if button_clicked and not self.import_in_progress:
-                self.go()
-            
-            imgui.pop_style_color(3)
+        # GO Button
+        imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.7, 0.2, 1.0)  # Green
+        imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.8, 0.3, 1.0)  # Lighter green
+        imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.6, 0.15, 1.0)  # Darker green
+        
+        # Disable button while import is in progress
+        if self.import_in_progress:
+            imgui.push_style_var(imgui.STYLE_ALPHA, 0.5)
+        
+        button_clicked = imgui.button("GO!", width=50, height=30)
+        
+        if self.import_in_progress:
+            imgui.pop_style_var(1)
+        
+        if button_clicked and not self.import_in_progress:
+            self.go()
+        
+        imgui.pop_style_color(3)
         
         # Show progress bar while import is in progress
         if self.import_in_progress:
@@ -1309,7 +1309,7 @@ viewsettings
             imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.6, 0.9, 1.0)  # Lighter blue
             imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.4, 0.7, 1.0)  # Darker blue
             
-            if imgui.button("Open Log", width=75, height=40):
+            if imgui.button("Open Log", width=75, height=30):
                 self.open_log_file()
             
             imgui.pop_style_color(3)
@@ -1320,7 +1320,7 @@ viewsettings
             imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.9, 0.8, 0.3, 1.0)  # Lighter yellow
             imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.7, 0.6, 0.15, 1.0)  # Darker yellow
             
-            if imgui.button("Open Addon", width=85, height=40):
+            if imgui.button("Open Folder", width=85, height=30):
                 self.open_addon_folder()
             
             imgui.pop_style_color(3)
