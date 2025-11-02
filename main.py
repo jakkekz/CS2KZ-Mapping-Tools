@@ -471,9 +471,11 @@ class ImGuiApp:
             cs2kz = self.format_version(versions.get('cs2kz', 'N/A'))
             return [f"KZ: {cs2kz}", f"MM: {metamod}"]  # KZ first, then MM
         elif name == 'source2viewer':
-            # Check if Source2Viewer.exe exists first
+            # Check if Source2Viewer.exe exists and is a valid file (not just empty/corrupt)
             s2v_path = os.path.join(app_dir, 'Source2Viewer.exe')
-            if not os.path.exists(s2v_path):
+            
+            # Check if file exists and has non-zero size
+            if not os.path.exists(s2v_path) or os.path.getsize(s2v_path) < 1000:
                 return ["Not installed"]
             
             # Check if we have a saved commit version
@@ -611,6 +613,13 @@ class ImGuiApp:
         
         # Setup ImGui
         imgui.create_context()
+        
+        # Load Roboto font
+        io = imgui.get_io()
+        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+        if os.path.exists(font_path):
+            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        
         self.impl = GlfwRenderer(self.window)
         
         # Create custom cursors

@@ -11,6 +11,10 @@ import argparse
 import time
 import ast
 
+# Force unbuffered output for real-time progress updates
+sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
+sys.stderr.reconfigure(line_buffering=True) if hasattr(sys.stderr, 'reconfigure') else None
+
 # Add the current working directory to Python path so we can import utils
 # This script is meant to be run from CS2's import_scripts directory
 cwd = os.getcwd()
@@ -427,6 +431,7 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 			return
 		
 		print(f"Found {len(models)} unique model references in VMF, importing from pak01...")
+		sys.stdout.flush()
 		
 		# Import models one by one to avoid batch failure
 		imported_models = []
@@ -444,6 +449,7 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 				imported_models.append(model)
 				# Print progress after each model
 				print(f"Imported {len(imported_models)} models")
+				sys.stdout.flush()
 				
 				# Check if a _refs.txt file was created for this model
 				refs_name = s2contentcsgoimported + "\\" + model.replace(".mdl", "_refs.txt").replace("/", "\\")
@@ -458,6 +464,7 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 				failed_count += 1
 		
 		print(f"Imported {len(imported_models)} models from pak01, {failed_count} skipped/failed")
+		sys.stdout.flush()
 		
 		# Import materials used by the models
 		if model_materials:
@@ -539,6 +546,7 @@ def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, err
 			return set()
 		
 		print(f"Found {len(materials)} unique material references in VMF, importing from pak01...")
+		sys.stdout.flush()  # Ensure progress is shown immediately
 		
 		# Import materials one by one to avoid batch failure
 		imported_materials = []
@@ -558,11 +566,13 @@ def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, err
 				imported_materials.append(material)
 				# Print progress after each material
 				print(f"Imported {len(imported_materials)} materials")
+				sys.stdout.flush()  # Force immediate output
 			except Exception as e:
 				print(f"Warning: Failed to import material {material}: {e}")
 				failed_count += 1
 		
 		print(f"Imported {len(imported_materials)} materials, {failed_count} failed")
+		sys.stdout.flush()
 		
 		# Skip compilation - CS2 Hammer will compile assets when the map is opened
 		# compile_refs = ""

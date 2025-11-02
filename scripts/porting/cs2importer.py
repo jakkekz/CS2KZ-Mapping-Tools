@@ -27,6 +27,16 @@ import io
 CUSTOM_TITLE_BAR_HEIGHT = 30
 
 
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
 class CS2ImporterApp:
     def __init__(self):
         self.window = None
@@ -87,10 +97,10 @@ class CS2ImporterApp:
         self.prerequisites_height = 0  # Track prerequisites section height
         
         # Window dimensions
-        self.base_window_height = 280  # Base height for main UI (increased to add space under GO button)
+        self.base_window_height = 290  # Base height for main UI (increased to add space under GO button)
         self.progress_tracking_height = 150  # Height added when showing progress tracking
-        self.completed_height = 35  # Height added when import completes (for failed assets section if needed)
-        self.prerequisites_expanded_height = 350  # Height for prerequisites section (increased to prevent GO button cutoff)
+        self.completed_height = 50  # Height added when import completes (for failed assets section if needed)
+        self.prerequisites_expanded_height = 370  # Height for prerequisites section (increased to prevent GO button cutoff)
         
         # Cursor state
         self.text_input_hovered = False
@@ -360,6 +370,13 @@ class CS2ImporterApp:
         
         # Setup ImGui
         imgui.create_context()
+        
+        # Load Roboto font
+        io = imgui.get_io()
+        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+        if os.path.exists(font_path):
+            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        
         self.impl = GlfwRenderer(self.window)
         
         # Setup style
@@ -909,8 +926,8 @@ viewsettings
             script_dir = os.path.dirname(os.path.abspath(__file__))
             jakke_script = os.path.join(script_dir, 'import_map_community_jakke.py').replace("/", "\\")
             
-            # Build command using our custom script
-            command = f'python "{jakke_script}" '
+            # Build command using our custom script with unbuffered output
+            command = f'python -u "{jakke_script}" '
             command += '"' + os.path.join(self.csgo_basefolder, 'csgo').replace("/", "\\") + '" '
             command += '"' + self.vmf_folder.replace("/", "\\") + '" '
             command += '"' + os.path.join(self.csgo_basefolder, 'game', 'csgo').replace("/", "\\") + '" '
