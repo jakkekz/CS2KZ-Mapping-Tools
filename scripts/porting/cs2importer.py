@@ -22,6 +22,7 @@ import webbrowser
 import urllib.request
 import zipfile
 import io
+from PIL import Image
 
 # Constants
 CUSTOM_TITLE_BAR_HEIGHT = 30
@@ -37,10 +38,16 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
+# Import theme manager after resource_path is defined
+sys.path.insert(0, resource_path('utils'))
+from theme_manager import ThemeManager
 class CS2ImporterApp:
     def __init__(self):
         self.window = None
         self.impl = None
+        
+        # Theme manager
+        self.theme_manager = ThemeManager()
         
         # Application state
         self.vmf_default_path = "C:\\"
@@ -104,6 +111,9 @@ class CS2ImporterApp:
         
         # Cursor state
         self.text_input_hovered = False
+        
+        # Button icons (texture IDs will be loaded here)
+        self.button_icons = {}
         
         # Override print for this instance
         self._original_print = print
@@ -363,6 +373,32 @@ class CS2ImporterApp:
         glfw.make_context_current(self.window)
         glfw.swap_interval(1)  # Enable vsync
         
+        # Set window icon
+        icon_path = resource_path(os.path.join("icons", "porting.ico"))
+        if os.path.exists(icon_path):
+            try:
+                icon_img = Image.open(icon_path)
+                if icon_img.mode != 'RGBA':
+                    icon_img = icon_img.convert('RGBA')
+                
+                # Try to set window icon - GLFW format varies by version
+                try:
+                    # Try newer format with GLFWimage
+                    from glfw import _GLFWimage
+                    img_buffer = icon_img.tobytes()
+                    img = _GLFWimage()
+                    img.width = icon_img.width
+                    img.height = icon_img.height
+                    img.pixels = img_buffer
+                    glfw.set_window_icon(self.window, 1, img)
+                except:
+                    # Try older list format
+                    icon_data = icon_img.tobytes()
+                    glfw.set_window_icon(self.window, 1, [[icon_img.width, icon_img.height, icon_data]])
+            except Exception as e:
+                # Silently fail - icon is nice to have but not critical
+                pass
+        
         # Create cursors for different UI elements
         self.hand_cursor = glfw.create_standard_cursor(glfw.HAND_CURSOR)
         self.arrow_cursor = glfw.create_standard_cursor(glfw.ARROW_CURSOR)
@@ -381,27 +417,64 @@ class CS2ImporterApp:
         
         # Setup style
         self.setup_style()
+        
+        # Load icons
+        self.load_icons()
+    
+    def load_icons(self):
+        """Load icons as OpenGL textures"""
+        icons = {
+            "title_icon": "porting.ico"
+        }
+        
+        for name, filename in icons.items():
+            path = resource_path(os.path.join("icons", filename))
+            if os.path.exists(path):
+                try:
+                    img = Image.open(path)
+                    # Ensure RGBA mode
+                    if img.mode != "RGBA":
+                        img = img.convert("RGBA")
+                    # Use smaller size for title icon
+                    img = img.resize((16, 16), Image.Resampling.LANCZOS)
+                    width, height = img.size
+                    img_data = img.tobytes()
+                    
+                    # Create OpenGL texture
+                    texture = gl.glGenTextures(1)
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+                    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, width, height,
+                                   0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, img_data)
+                    
+                    self.button_icons[name] = texture
+                except Exception as e:
+                    pass  # Silently fail
     
     def setup_style(self):
-        """Configure ImGui visual style to match main.py dark theme"""
+        """Configure ImGui visual style using theme manager"""
         style = imgui.get_style()
         io = imgui.get_io()
         
         io.font_global_scale = 1.0
         
+        # Get theme from theme manager
+        theme = self.theme_manager.get_theme()
+        
         imgui.style_colors_dark()
-        # Match CustomTkinter dark theme
-        style.colors[imgui.COLOR_WINDOW_BACKGROUND] = (0.1, 0.1, 0.1, 1.0)
-        style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = (0.16, 0.16, 0.16, 1.0)
-        style.colors[imgui.COLOR_BUTTON] = (0.29, 0.29, 0.29, 1.0)
-        style.colors[imgui.COLOR_BUTTON_HOVERED] = (0.35, 0.35, 0.35, 1.0)
-        style.colors[imgui.COLOR_BUTTON_ACTIVE] = (0.40, 0.40, 0.40, 1.0)
-        style.colors[imgui.COLOR_BORDER] = (0.40, 0.40, 0.40, 1.0)
-        style.colors[imgui.COLOR_TEXT] = (1.0, 1.0, 1.0, 1.0)
-        style.colors[imgui.COLOR_FRAME_BACKGROUND] = (0.16, 0.16, 0.16, 1.0)
-        style.colors[imgui.COLOR_FRAME_BACKGROUND_HOVERED] = (0.20, 0.20, 0.20, 1.0)
-        style.colors[imgui.COLOR_FRAME_BACKGROUND_ACTIVE] = (0.25, 0.25, 0.25, 1.0)
-        style.colors[imgui.COLOR_CHECK_MARK] = (1.0, 0.6, 0.0, 1.0)  # Orange accent
+        # Apply theme colors
+        style.colors[imgui.COLOR_WINDOW_BACKGROUND] = theme['window_bg']
+        style.colors[imgui.COLOR_MENUBAR_BACKGROUND] = theme['title_bar_bg']
+        style.colors[imgui.COLOR_BUTTON] = theme['button']
+        style.colors[imgui.COLOR_BUTTON_HOVERED] = theme['button_hover']
+        style.colors[imgui.COLOR_BUTTON_ACTIVE] = theme['button_active']
+        style.colors[imgui.COLOR_BORDER] = theme['border']
+        style.colors[imgui.COLOR_TEXT] = theme['text']
+        style.colors[imgui.COLOR_FRAME_BACKGROUND] = theme['title_bar_bg']
+        style.colors[imgui.COLOR_FRAME_BACKGROUND_HOVERED] = theme['button_hover']
+        style.colors[imgui.COLOR_FRAME_BACKGROUND_ACTIVE] = theme['button_active']
+        style.colors[imgui.COLOR_CHECK_MARK] = theme['accent']
         
         # Window rounding
         style.window_rounding = 0.0
@@ -509,11 +582,34 @@ class CS2ImporterApp:
             self.vmf_status_color = (1.0, 0.0, 0.0, 1.0)
     
     def fix_vmf_structure(self, vmf_path):
-        """Add proper VMF header structure for CS2 importer compatibility"""
+        """Add proper VMF header structure for CS2 importer compatibility and fix tool textures"""
         try:
             # Read the VMF file
             with open(vmf_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
+            
+            # Fix tool textures that BSPSource incorrectly converts
+            # BSPSource often converts nodraw faces to playerclip/skip/hint/etc based on brush properties
+            # But for CS2 import, we want to preserve nodraw on void-facing faces
+            # Note: The actual void face culling happens in VBSP with -usebsp flag
+            import re
+            
+            # Count replacements for logging
+            replacements = {
+                'TOOLS/TOOLSPLAYERCLIP': 0,
+                'TOOLS/TOOLSSKIP': 0,
+                'TOOLS/TOOLSHINT': 0,
+                'TOOLS/TOOLSTRIGGER': 0,
+                'TOOLS/TOOLSBLOCKLIGHT': 0,
+                'TOOLS/TOOLSBLOCKBULLETS': 0,
+                'TOOLS/TOOLSINVISIBLE': 0,
+                'TOOLS/TOOLSCLIP': 0
+            }
+            
+            # Replace tool textures that should be nodraw for proper void culling
+            # Keep these as-is - VBSP will handle optimization with -usebsp flag
+            # Actually, don't replace them - let VBSP handle it with the original BSP
+            # The issue is BSPSource guessing wrong, but VBSP with -usebsp uses original BSP geo
             
             # Check if it already has versioninfo (Hammer-formatted VMF)
             if 'versioninfo' in content.lower():
@@ -562,9 +658,10 @@ viewsettings
                 self.log("CS:GO folder not set")
                 return False
             
-            # Check/download BSPSource to temp folder
-            temp_dir = tempfile.gettempdir()
-            bspsrc_dir = os.path.join(temp_dir, "bspsrc")
+            # Check/download BSPSource to temp folder in .cs2kz-mapping-tools
+            cs2kz_temp = os.path.join(tempfile.gettempdir(), ".cs2kz-mapping-tools")
+            os.makedirs(cs2kz_temp, exist_ok=True)
+            bspsrc_dir = os.path.join(cs2kz_temp, "bspsrc")
             bspsrc_bat = os.path.join(bspsrc_dir, "bspsrc.bat")
             
             if not os.path.exists(bspsrc_bat):
@@ -590,7 +687,10 @@ viewsettings
 
             # Create a unique temporary directory for BSPSource output
             # Using mkdtemp ensures a unique, safe directory that doesn't conflict
-            temp_output_dir = tempfile.mkdtemp(prefix="bspsrc_output_")
+            # Place it in .cs2kz-mapping-tools subfolder for organization
+            cs2kz_temp = os.path.join(tempfile.gettempdir(), ".cs2kz-mapping-tools")
+            os.makedirs(cs2kz_temp, exist_ok=True)
+            temp_output_dir = tempfile.mkdtemp(prefix="bspsrc_output_", dir=cs2kz_temp)
             
             # BSPSource needs the FULL VMF OUTPUT PATH, not just directory
             map_base_name = os.path.splitext(os.path.basename(bsp_path))[0]
@@ -618,6 +718,7 @@ viewsettings
                 java_exe,
                 "-m", "info.ata4.bspsrc.app/info.ata4.bspsrc.app.src.cli.BspSourceCli",
                 "--unpack_embedded",  # Extract embedded files (materials, models, sounds, etc.)
+                "--no_ttfix",  # Don't "fix" tool textures - preserve original toolsnodraw etc.
                 "-o", temp_vmf_normalized,
                 bsp_path_normalized
             ]
@@ -790,6 +891,19 @@ viewsettings
                         shutil.rmtree(temp_output_dir)
                 except Exception as e:
                     self.log(f"Warning: Could not clean up temp directory: {e}")
+                
+                # Copy the original BSP file to csgo/maps so source1import can use it with -usebsp
+                # This preserves the face culling from the original BSP
+                self.log(f"Copying original BSP file for optimized import...")
+                try:
+                    bsp_dest = os.path.join(csgo_maps, map_base_name + ".bsp")
+                    if os.path.exists(bsp_dest):
+                        os.remove(bsp_dest)
+                    shutil.copy2(bsp_path, bsp_dest)
+                    self.log(f"✓ Copied BSP file to: {bsp_dest}")
+                except Exception as e:
+                    self.log(f"⚠ Could not copy BSP file: {e}")
+                    self.log("  Will compile VMF to BSP during import (may take longer)")
                 
                 # Check if VMF was successfully moved
                 if os.path.exists(csgo_vmf):
@@ -1005,8 +1119,11 @@ viewsettings
         imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (8, 6))
         imgui.push_style_var(imgui.STYLE_WINDOW_BORDERSIZE, 0.0)
         
-        # Title bar background color (darker gray)
-        imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, 0.12, 0.12, 0.12, 1.0)
+        # Title bar background color from theme (slightly darker than window background)
+        theme = self.theme_manager.get_theme()
+        r, g, b, a = theme['window_bg']
+        title_bg = (r * 0.8, g * 0.8, b * 0.8, a)
+        imgui.push_style_color(imgui.COLOR_WINDOW_BACKGROUND, *title_bg)
         
         flags = (
             imgui.WINDOW_NO_TITLE_BAR |
@@ -1016,6 +1133,11 @@ viewsettings
         )
         
         imgui.begin("##titlebar", flags=flags)
+        
+        # Draw icon if available
+        if "title_icon" in self.button_icons:
+            imgui.image(self.button_icons["title_icon"], 16, 16)
+            imgui.same_line(spacing=4)
         
         # Title text
         imgui.text("CS2 Map Importer")
@@ -1103,6 +1225,10 @@ viewsettings
 
     def render(self):
         """Render the ImGui interface"""
+        # Check for theme updates
+        if self.theme_manager.check_for_updates():
+            self.setup_style()
+        
         # Render custom title bar first
         self.render_custom_title_bar()
         
@@ -1194,14 +1320,6 @@ viewsettings
             # Step 4
             imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
             imgui.text_wrapped("4. GO!")
-            imgui.pop_style_color()
-            
-            imgui.spacing()
-            
-            # Step 5
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
-            imgui.text_wrapped("5. \"Create New Addon\" in the Hammer Main Menu")
-            imgui.text("     with the same addon name you specified")
             imgui.pop_style_color()
             
             imgui.pop_text_wrap_pos()

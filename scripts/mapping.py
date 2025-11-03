@@ -344,8 +344,22 @@ def save_versions(cs2_dir: str, versions: dict):
     app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
     os.makedirs(app_dir, exist_ok=True)
     version_file = os.path.join(app_dir, 'cs2kz_versions.txt')
+    
+    # Read existing versions to preserve them
+    existing_versions = {}
+    if os.path.exists(version_file):
+        with open(version_file, 'r') as f:
+            for line in f:
+                if '=' in line:
+                    key, value = line.strip().split('=', 1)
+                    existing_versions[key] = value
+    
+    # Merge new versions with existing (new versions take priority)
+    existing_versions.update(versions)
+    
+    # Write all versions back
     with open(version_file, 'w') as f:
-        for key, value in versions.items():
+        for key, value in existing_versions.items():
             f.write(f"{key}={value}\n")
 
 def check_setup_needed(cs2_dir: str, check_metamod=True, check_cs2kz=True):

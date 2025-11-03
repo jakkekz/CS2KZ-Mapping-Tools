@@ -91,7 +91,7 @@ jobs:
         run: |
           pyinstaller --onefile `
             --name=CS2KZMappingTools `
-            --icon=icons/icon.ico `
+            --icon=icons/hammerkz.ico `
             --add-data="icons;icons" `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `

@@ -10,6 +10,8 @@ import sys
 import argparse
 import time
 import ast
+import shutil
+import tempfile
 
 # Force unbuffered output for real-time progress updates
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
@@ -457,14 +459,22 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 					refs = utl.ReadTextFile(refs_name)
 					str_refs = utl.ListStringFromRefs(refs)
 					mtllist = str_refs.split("\n")
+					materials_found = 0
 					for mtlname in mtllist:
 						if mtlname.strip():
 							model_materials.add(mtlname.strip())
+							materials_found += 1
+					if materials_found > 0:
+						print(f"  Found {materials_found} materials in refs for {model}")
+				else:
+					print(f"  No refs file found for {model} at {refs_name}")
 			except Exception as e:
 				failed_count += 1
 		
 		print(f"Imported {len(imported_models)} models from pak01, {failed_count} skipped/failed")
 		sys.stdout.flush()
+		
+		print(f"Collected {len(model_materials)} unique materials from model refs files")
 		
 		# Import materials used by the models
 		if model_materials:
@@ -472,11 +482,13 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 			
 			# Create a refs file for model materials
 			model_mtl_refs = utl.RefsStringFromList(list(model_materials))
+			# Write to the same directory as the VMF file (csgo/maps/)
 			temp_refs = vmf_path.replace(".vmf", "_model_mtl_refs.txt")
 			utl.EnsureFileWritable(temp_refs)
 			fw = open(temp_refs, "w")
 			fw.write(model_mtl_refs)
 			fw.close()
+			print(f"Created model material refs file: {temp_refs}")
 			
 			# Import model materials from pak01
 			importRefsCmd = f"source1import -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo -usefilelist \"{temp_refs}\""
@@ -499,6 +511,8 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 			# 		pass  # Continue with other materials
 			
 			print(f"Imported {len(model_materials)} model materials (skipping compilation)")
+		else:
+			print("No model materials found in model refs files - skipping model_mtl_refs creation")
 		
 		# Skip compilation - CS2 Hammer will compile assets when the map is opened
 		# if imported_models:
@@ -690,8 +704,11 @@ s2contentcsgoimported = s2contentcsgo
 
 # Define a non-aborting error callback for all import operations
 # This prevents the script from exiting when individual assets fail to import
-def errorCallback(cmd):
-	print(f"Warning: Command failed but continuing with import: {cmd}")
+def errorCallback(cmd=None):
+	if cmd:
+		print(f"Warning: Command failed but continuing with import: {cmd}")
+	else:
+		print(f"Warning: Import encountered an error but continuing...")
 
 # Disable VPK signature checking before starting import
 vpk_sig_path, vpk_sig_old = DisableVPKSignatures(s2gamecsgo)
@@ -719,41 +736,126 @@ else:
 		print("Please verify game files integrity in Steam.")
 
 try:
-	# Fix material file case to match VMF before import
-	print("Fixing material file case to match VMF references...")
 	# s1contentcsgo already includes \maps, so don't add it again
 	vmf_file_path = s1contentcsgo + "\\" + mapname + ".vmf"
+	
+	print("Starting VMF import...")
+	print(f"Using BSP optimization: {usebsp}")
+	
+	# Check if there's an original BSP file we can use for optimized import
+	bsp_file_path = s1contentcsgo + "\\" + mapname + ".bsp"
+	if os.path.exists(bsp_file_path):
+		print(f"[OK] Found original BSP file - will use it for face-culled import: {bsp_file_path}")
+		# Force usebsp to True to use the pre-optimized BSP
+		if not usebsp:
+			print("  Enabling -usebsp to utilize BSP's face culling")
+			usebsp = True
+	else:
+		if usebsp:
+			print("[WARNING] No BSP file found - will compile VMF to BSP first (this adds extra time)")
+			print("  Note: Decompiled VMFs may have more faces than original")
+	
+	# CRITICAL FIX: source1import's VBSP has issues with paths containing spaces
+	# Copy VMF and BSP to temp directory to avoid "Counter-Strike Global Offensive" path issues
+	# Place it in .cs2kz-mapping-tools subfolder for organization
+	cs2kz_temp = os.path.join(tempfile.gettempdir(), ".cs2kz-mapping-tools")
+	os.makedirs(cs2kz_temp, exist_ok=True)
+	temp_import_dir = tempfile.mkdtemp(prefix="cs2import_", dir=cs2kz_temp)
+	temp_maps_dir = os.path.join(temp_import_dir, "maps")
+	os.makedirs(temp_maps_dir, exist_ok=True)
+	
+	# Temporarily rename the original VMF/BSP in csgo/maps to prevent source1import from finding it
+	# source1import searches multiple paths and will use the one with spaces if it finds it first
+	original_vmf_backup = vmf_file_path + ".backup_temp"
+	original_bsp_backup = bsp_file_path + ".backup_temp"
+	vmf_was_renamed = False
+	bsp_was_renamed = False
+	
+	try:
+		if os.path.exists(vmf_file_path):
+			os.rename(vmf_file_path, original_vmf_backup)
+			vmf_was_renamed = True
+			print(f"Temporarily renamed original VMF to prevent path issues")
+		
+		if os.path.exists(bsp_file_path):
+			os.rename(bsp_file_path, original_bsp_backup)
+			bsp_was_renamed = True
+			print(f"Temporarily renamed original BSP to prevent path issues")
+	except Exception as e:
+		print(f"Warning: Could not rename original files: {e}")
+	
+	# Copy VMF to temp
+	temp_vmf = os.path.join(temp_maps_dir, mapname + ".vmf")
+	shutil.copy2(original_vmf_backup if vmf_was_renamed else vmf_file_path, temp_vmf)
+	print(f"Copied VMF to temp directory (to avoid path space issues): {temp_vmf}")
+	
+	# Copy BSP to temp if it exists (needed for -usebsp)
+	if vmf_was_renamed or os.path.exists(bsp_file_path):
+		temp_bsp = os.path.join(temp_maps_dir, mapname + ".bsp")
+		bsp_source = original_bsp_backup if bsp_was_renamed else bsp_file_path
+		if os.path.exists(bsp_source):
+			shutil.copy2(bsp_source, temp_bsp)
+			print(f"Copied BSP to temp directory: {temp_bsp}")
+	
+	# IMPORTANT: Import VMF with -usebsp FIRST to allow VBSP to cull void-facing faces
+	# This must happen before importing materials/models to get proper face culling
+	# Use temp directory to avoid path issues with "Counter-Strike Global Offensive"
+	mapImportCmd = "source1import -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + temp_import_dir + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
+	
+	print(f"Import command: {mapImportCmd}")
+	
+	try:
+		utl.RunCommand( mapImportCmd, errorCallback )
+		print("Successfully imported VMF to VMAP with face culling")
+	except Exception as e:
+		print(f"Warning: VMF import failed: {e}")
+		print("Continuing with dependency import...")
+	finally:
+		# Restore renamed files
+		try:
+			if vmf_was_renamed and os.path.exists(original_vmf_backup):
+				os.rename(original_vmf_backup, vmf_file_path)
+				print(f"Restored original VMF")
+			if bsp_was_renamed and os.path.exists(original_bsp_backup):
+				os.rename(original_bsp_backup, bsp_file_path)
+				print(f"Restored original BSP")
+		except Exception as e:
+			print(f"Warning: Could not restore original files: {e}")
+		
+		# Clean up temp directory
+		try:
+			if os.path.exists(temp_import_dir):
+				shutil.rmtree(temp_import_dir)
+				print(f"Cleaned up temp directory: {temp_import_dir}")
+		except Exception as e:
+			print(f"Warning: Could not clean up temp directory: {e}")
+
+	print("VMF import process completed.")
+	
+	# Now import materials and models AFTER the VMF has been processed
+	# Fix material file case to match VMF before import
+	print("Fixing material file case to match VMF references...")
 	# Use s1gamecsgo (CS:GO installation path) instead of s1contentcsgo (Desktop path)
 	# because materials are in "Counter-Strike Global Offensive\csgo\materials"
 	materials_base_path = os.path.join(s1gamecsgo, "..")  # Go up one level from csgo folder
 	FixMaterialCase(vmf_file_path, materials_base_path)
 
-	# Import all materials referenced in VMF from pak01 before VMF import
+	# Import all materials referenced in VMF from pak01
 	vmf_imported_materials = set()
 	try:
 		vmf_imported_materials = ImportVMFMaterials(vmf_file_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback)
 	except Exception as e:
 		print(f"Warning: VMF material import failed: {e}")
-		print("Continuing with VMF import...")
+		print("Continuing with model import...")
 
-	# Import all models referenced in VMF from pak01 before VMF import
+	# Import all models referenced in VMF from pak01
 	try:
 		ImportVMFModels(vmf_file_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorCallback)
 	except Exception as e:
 		print(f"Warning: VMF model import failed: {e}")
-		print("Continuing with VMF import...")
-
-	print("Starting VMF import...")
-	# import vmf to vmap
-	mapImportCmd = "source1import -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1contentcsgo + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
-	try:
-		utl.RunCommand( mapImportCmd, errorCallback )
-		print("Successfully imported VMF to VMAP")
-	except Exception as e:
-		print(f"Warning: VMF import failed: {e}")
+		import traceback
+		traceback.print_exc()
 		print("Continuing with post-processing...")
-
-	print("VMF import process completed.")
 
 	# replace 'instance' paths with 'prefab' 
 	mapname = mapname.replace( "instances", "prefabs" )

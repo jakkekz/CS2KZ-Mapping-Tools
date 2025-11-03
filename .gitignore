@@ -30,6 +30,9 @@ imgui.ini
 # User-specific config files
 scripts/porting/cs2importer.cfg
 
+# Sarim's CS2 Map Importer (reference implementation)
+cs2-map-importer-sarimhk/
+
 # IDEs
 .vscode/
 .idea/

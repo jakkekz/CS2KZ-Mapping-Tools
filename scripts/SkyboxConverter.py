@@ -90,14 +90,14 @@ EXR_TRANSFORMS = {
 # 2. Configuration for all other formats (VTF, PNG, JPG, etc.) - Standard 1:1 Cubemap
 # --- CORRECTED STANDARD ROTATIONS FOR NON-EXR FILES (VTF/PNG) ---
 DEFAULT_TRANSFORMS = {
-    # Standard cubemap projection (VTF/Source) requires a 180-degree rotation on UP/DOWN for 4x3 format.
-    # The image file names must match the target slot name.
+    # Standard 1:1 cubemap - no remapping needed for px/nx/py/ny/pz/nz naming
+    # Each face goes directly to its corresponding slot
     'up':      ('up', 0, None),
     'down':    ('down', 0, None),
-    'left':    ('back', 0, None), 
-    'front':   ('right', 0, None),
-    'right':   ('front', 0, None), 
-    'back':    ('left', 0, None),
+    'left':    ('left', 0, None), 
+    'front':   ('front', 0, None),
+    'right':   ('right', 0, None), 
+    'back':    ('back', 0, None),
 }
 # --- END CORRECTED ROTATIONS ---
 
@@ -250,7 +250,7 @@ def determine_skybox_prefix(filenames_map):
         return "default_skybox"
 
     # Keywords to strip from the end of the filename (before extension)
-    KEYWORDS = ['up', 'dn', 'bk', 'ft', 'lf', 'rt', 'top', 'down', 'back', 'front', 'left', 'right']
+    KEYWORDS = ['up', 'dn', 'bk', 'ft', 'lf', 'rt', 'top', 'down', 'back', 'front', 'left', 'right', 'px', 'nx', 'py', 'ny', 'pz', 'nz']
     
     prefixes = []
     
@@ -314,12 +314,12 @@ def find_cubemap_files(directory="."):
     Prints the names of any missing required face images.
     """
     FACE_KEYWORDS = {
-        'back': ['back', 'bk'],
-        'up':   ['up', 'top'],     
-        'front':['front', 'ft'],
-        'right':['right', 'rt'],
-        'left': ['left', 'lf'],
-        'down': ['down', 'dn'],    
+        'right':['right', 'rt', 'px'],
+        'left': ['left', 'lf', 'nx'],
+        'back': ['back', 'bk', 'py'],
+        'front':['front', 'ft', 'ny'],
+        'up':   ['up', 'top', 'pz'],     
+        'down': ['down', 'dn', 'nz'],    
     }
     REQUIRED_FACES = set(FACE_KEYWORDS.keys())
     IMAGE_EXTENSIONS = ('.vtf', '.png', '.jpg', '.jpeg', '.tga', '.exr') 
@@ -332,9 +332,11 @@ def find_cubemap_files(directory="."):
     target_files = [f for f in all_files if os.path.isfile(f) and f.lower().endswith(ALL_EXTENSIONS)]
     
     print(f"Found {len(target_files)} potential image/vtf files in the directory.")
+    print(f"Files: {[os.path.basename(f) for f in target_files]}")
     
     for face_name, keywords in FACE_KEYWORDS.items():
         found = False
+        print(f"\nSearching for face '{face_name}' with keywords: {keywords}")
         
         # Check for IMAGE files first
         for ext in IMAGE_EXTENSIONS:
@@ -343,18 +345,22 @@ def find_cubemap_files(directory="."):
                 if fpath.lower().endswith(ext):
                     # Check for "skybox" or a similar prefix followed by a keyword
                     fname_lower = os.path.basename(fpath).lower()
-                    if any(keyword in fname_lower for keyword in keywords):
-                        # Ensure a match on the full word or a common abbreviation
-                        for keyword in keywords:
-                            # Simple check for keyword at the end of filename (before extension)
-                            name_no_ext = os.path.splitext(fname_lower)[0]
-                            if name_no_ext.endswith(keyword):
-                                found_files[face_name] = fpath
-                                found = True
-                                print(f"Found file for '{face_name}': {os.path.basename(fpath)}")
-                                break
-                            
-                        if found: break
+                    name_no_ext = os.path.splitext(fname_lower)[0]
+                    
+                    print(f"  Checking file: {os.path.basename(fpath)} (name without ext: '{name_no_ext}')")
+                    
+                    # Check if any keyword matches
+                    for keyword in keywords:
+                        # Match if keyword is at the end of filename OR is the entire filename
+                        if name_no_ext.endswith(keyword) or name_no_ext == keyword:
+                            found_files[face_name] = fpath
+                            found = True
+                            print(f"    ✓ MATCHED! Found file for '{face_name}': {os.path.basename(fpath)} (matched keyword: '{keyword}')")
+                            break
+                        else:
+                            print(f"    - No match for keyword '{keyword}' (endswith: {name_no_ext.endswith(keyword)}, equals: {name_no_ext == keyword})")
+                    
+                    if found: break
         
         # VMT check is kept for error reporting, but not used in stitching
         if not found:

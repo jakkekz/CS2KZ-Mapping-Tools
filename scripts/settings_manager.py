@@ -20,9 +20,10 @@ class SettingsManager:
                 'skyboxconverter': True,
                 'loading_screen': True,
                 'point_worldtext': False,
-                'vtf2png': False
+                'vtf2png': False,
+                'sounds': True
             },
-            'button_order': ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png'],  # Custom button order
+            'button_order': ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png', 'sounds'],  # Custom button order
             'window_position': None,  # Will store as [x, y]
             'appearance_mode': 'system',  # For CustomTkinter
             'color_theme': 'blue',  # For CustomTkinter

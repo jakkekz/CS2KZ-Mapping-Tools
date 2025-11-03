@@ -9,17 +9,30 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+from PIL import Image, ImageTk
 
 # Import the creator functions
 from creator import (
     get_cs2_path,
     create_vmat_content,
     compile_vmat_files,
-    compile_svg_files,
-    Image
+    compile_svg_files
 )
 
-# CustomTkinter-like dark theme colors
+# Helper function for PyInstaller resource paths
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Import theme manager after resource_path is defined
+sys.path.insert(0, resource_path('utils'))
+from theme_manager import ThemeManager
+
+# CustomTkinter-like dark theme colors (defaults - will be overridden by theme manager)
 DARK_BG = "#1a1a1a"  # Window background (0.1, 0.1, 0.1)
 DARK_FRAME = "#2b2b2b"  # Frame/Entry background (0.17, 0.17, 0.17)
 DARK_BUTTON = "#4a4a4a"  # Button background (0.29, 0.29, 0.29)
@@ -39,6 +52,18 @@ class LoadingScreenCreatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("CS2 Loading Screen Creator")
+        
+        # Initialize theme manager
+        self.theme_manager = ThemeManager()
+        self.apply_theme()
+        
+        # Set window icon
+        try:
+            icon_path = resource_path(os.path.join("icons", "loading.ico"))
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+        except Exception as e:
+            print(f"Could not set window icon: {e}")
         
         # Remove default title bar
         self.root.overrideredirect(True)
@@ -72,6 +97,9 @@ class LoadingScreenCreatorGUI:
         self.cs2_path = get_cs2_path()
         
         self.create_widgets()
+        
+        # Start theme update checking
+        self.check_theme_updates()
     
     def start_drag(self, event):
         self._drag_start_x = event.x
@@ -83,13 +111,70 @@ class LoadingScreenCreatorGUI:
         self.root.geometry(f"+{x}+{y}")
     
     def minimize_window(self):
-        # Use iconify with a workaround for overrideredirect
+        # Store window position before minimizing
+        self.root.update_idletasks()
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
+        
+        # Temporarily disable overrideredirect to allow minimize
         self.root.overrideredirect(False)
-        self.root.state('iconic')
-        self.root.overrideredirect(True)
+        self.root.update_idletasks()
+        
+        # Minimize the window
+        self.root.iconify()
+        
+        # When window is restored, re-enable overrideredirect and restore position
+        def restore_overrideredirect():
+            if self.root.state() == 'normal':
+                self.root.overrideredirect(True)
+                self.root.geometry(f"+{x}+{y}")
+            else:
+                # Check again later
+                self.root.after(100, restore_overrideredirect)
+        
+        # Start checking for restore
+        self.root.after(100, restore_overrideredirect)
     
     def close_window(self):
         self.root.destroy()
+    
+    def apply_theme(self):
+        """Apply theme colors from theme manager"""
+        global DARK_BG, DARK_FRAME, DARK_BUTTON, DARK_BUTTON_HOVER, DARK_BORDER, DARK_TEXT, DARK_TEXT_SECONDARY, ACCENT_ORANGE, TITLE_BAR_BG
+        theme = self.theme_manager.get_theme()
+        
+        DARK_BG = self.theme_manager.to_hex(theme['window_bg'])
+        TITLE_BAR_BG = self.theme_manager.to_hex(theme['title_bar_bg'])
+        DARK_FRAME = self.theme_manager.to_hex(theme['title_bar_bg'])
+        DARK_BUTTON = self.theme_manager.to_hex(theme['button'])
+        DARK_BUTTON_HOVER = self.theme_manager.to_hex(theme['button_hover'])
+        DARK_BORDER = self.theme_manager.to_hex(theme['border'])
+        DARK_TEXT = self.theme_manager.to_hex(theme['text'])
+        ACCENT_ORANGE = self.theme_manager.to_hex(theme['accent'])
+        
+        # Apply to root window if it exists
+        if hasattr(self, 'root') and self.root.winfo_exists():
+            self.root.configure(bg=DARK_BG)
+            
+            # Update title bar widgets if they exist
+            for widget in self.root.winfo_children():
+                if isinstance(widget, tk.Frame) and widget.winfo_height() == TITLE_BAR_HEIGHT:
+                    # Found title bar
+                    widget.configure(bg=TITLE_BAR_BG)
+                    # Update all child widgets in title bar
+                    for child in widget.winfo_children():
+                        if isinstance(child, (tk.Label, tk.Button)):
+                            try:
+                                child.configure(bg=TITLE_BAR_BG, fg=DARK_TEXT)
+                            except:
+                                pass
+    
+    def check_theme_updates(self):
+        """Check for theme updates and reapply if needed"""
+        if self.theme_manager.check_for_updates():
+            self.apply_theme()
+            # Would need to rebuild UI to fully apply - just update what we can
+        self.root.after(1000, self.check_theme_updates)
     
     def create_widgets(self):
         # Custom title bar
@@ -101,11 +186,28 @@ class LoadingScreenCreatorGUI:
         title_bar.bind("<Button-1>", self.start_drag)
         title_bar.bind("<B1-Motion>", self.on_drag)
         
+        # Try to load and add icon to title bar
+        try:
+            icon_path = resource_path(os.path.join("icons", "loading.ico"))
+            if os.path.exists(icon_path):
+                # Load icon image and resize to 16x16
+                icon_img = Image.open(icon_path)
+                icon_img = icon_img.resize((16, 16), Image.Resampling.LANCZOS)
+                self.title_icon = ImageTk.PhotoImage(icon_img)
+                
+                # Add icon label
+                icon_label = tk.Label(title_bar, image=self.title_icon, bg=TITLE_BAR_BG)
+                icon_label.pack(side=tk.LEFT, padx=(10, 5))
+                icon_label.bind("<Button-1>", self.start_drag)
+                icon_label.bind("<B1-Motion>", self.on_drag)
+        except Exception as e:
+            print(f"Could not load title bar icon: {e}")
+        
         # Title text
         title_label = tk.Label(title_bar, text="CS2 Loading Screen Creator", 
                               bg=TITLE_BAR_BG, fg=DARK_TEXT,
                               font=("Segoe UI", 9))
-        title_label.pack(side=tk.LEFT, padx=10)
+        title_label.pack(side=tk.LEFT, padx=0)
         title_label.bind("<Button-1>", self.start_drag)
         title_label.bind("<B1-Motion>", self.on_drag)
         

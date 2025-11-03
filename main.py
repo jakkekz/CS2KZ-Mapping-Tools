@@ -79,7 +79,8 @@ class ImGuiApp:
             "skyboxconverter": saved_visibility.get("skyboxconverter", True),
             "vtf2png": saved_visibility.get("vtf2png", False),
             "loading_screen": saved_visibility.get("loading_screen", True),
-            "point_worldtext": saved_visibility.get("point_worldtext", False)
+            "point_worldtext": saved_visibility.get("point_worldtext", False),
+            "sounds": saved_visibility.get("sounds", True)
         }
         
         # Button order from settings
@@ -229,9 +230,10 @@ class ImGuiApp:
                 "skyboxconverter": True,
                 "vtf2png": False,
                 "loading_screen": True,
-                "point_worldtext": False
+                "point_worldtext": False,
+                "sounds": True
             }
-            self.button_order = ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png']
+            self.button_order = ['mapping', 'listen', 'dedicated_server', 'insecure', 'source2viewer', 'cs2importer', 'skyboxconverter', 'loading_screen', 'point_worldtext', 'vtf2png', 'sounds']
             self.show_move_icons = False
             self.auto_update_source2viewer = True
             self.auto_update_metamod = True
@@ -365,6 +367,103 @@ class ImGuiApp:
         except Exception as e:
             print(f"Error removing Source2Viewer: {e}")
     
+    def verify_game_files(self):
+        """Restore all modified game files to original state from GitHub"""
+        import winreg
+        import vdf
+        import urllib.request
+        
+        print("Starting game file verification...")
+        
+        try:
+            # Get CS2 path using same method as other scripts
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as key:
+                    steam_path, _ = winreg.QueryValueEx(key, "SteamPath")
+            except FileNotFoundError:
+                print("✗ Steam installation not found")
+                return
+            
+            libraryfolders_path = os.path.join(steam_path, "steamapps", "libraryfolders.vdf")
+            if not os.path.exists(libraryfolders_path):
+                print("✗ Steam library folders not found")
+                return
+            
+            with open(libraryfolders_path, 'r', encoding='utf-8') as file:
+                library_data = vdf.load(file)
+            
+            cs2_library_path = None
+            if 'libraryfolders' in library_data:
+                for _, folder in library_data['libraryfolders'].items():
+                    if 'apps' in folder and '730' in folder['apps']:
+                        cs2_library_path = folder['path']
+                        break
+            
+            if not cs2_library_path:
+                print("✗ CS2 installation not found")
+                return
+            
+            cs2_path = os.path.join(cs2_library_path, 'steamapps', 'common', 'Counter-Strike Global Offensive')
+            
+            if not os.path.exists(cs2_path):
+                print(f"✗ CS2 path not found: {cs2_path}")
+                return
+            
+            print(f"Found CS2 at: {cs2_path}")
+            
+            # Files to restore from GitHub
+            BASE_URL = 'https://raw.githubusercontent.com/SteamDatabase/GameTracking-CS2/refs/heads/master/'
+            
+            files_to_restore = [
+                'game/csgo/gameinfo.gi',
+                'game/csgo_core/gameinfo.gi',
+                'game/bin/sdkenginetools.txt',
+                'game/bin/assettypes_common.txt'
+            ]
+            
+            files_restored = 0
+            files_failed = 0
+            
+            for file_path in files_to_restore:
+                url = BASE_URL + file_path
+                full_path = os.path.join(cs2_path, file_path)
+                
+                try:
+                    print(f"Downloading {file_path}...")
+                    response = urllib.request.urlopen(url, timeout=10)
+                    
+                    if response.getcode() != 200:
+                        print(f"✗ Failed to download {file_path} (HTTP {response.getcode()})")
+                        files_failed += 1
+                        continue
+                    
+                    content = response.read().decode('utf-8').replace('\n', '\r\n')
+                    
+                    # Create directory if needed
+                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                    
+                    # Write file
+                    with open(full_path, 'wb') as f:
+                        f.write(content.encode('utf-8'))
+                    
+                    print(f"✓ Restored {file_path}")
+                    files_restored += 1
+                    
+                except Exception as e:
+                    print(f"✗ Error restoring {file_path}: {e}")
+                    files_failed += 1
+            
+            # Summary
+            print(f"\nVerification complete:")
+            print(f"  ✓ {files_restored} files restored")
+            if files_failed > 0:
+                print(f"  ✗ {files_failed} files failed")
+            print("\nGame files have been restored to their original state.")
+            print("(Addons folder preserved)")
+            
+        except Exception as e:
+            print(f"✗ Error during verification: {e}")
+    
     def open_data_folder(self):
         """Open the data folder in Windows Explorer"""
         import tempfile
@@ -436,23 +535,25 @@ class ImGuiApp:
         tooltips = {
             "mapping": "Launches CS2 Hammer Editor with the latest Metamod, CS2KZ and Mapping API versions. (insecure)",
             
-            "listen": "Launches CS2 with the latest Metamod, CS2KZ and Mapping API versions. (insecure)",
+            "listen": "Launches CS2 with the latest Metamod and CS2KZ versions. (insecure)",
             
             "dedicated_server": "Launches a CS2 Dedicated Server with the latest Metamod, CS2KZ and Mapping API versions. (insecure)",
             
             "insecure": "Launches CS2 in insecure mode.",
             
-            "source2viewer": f"Launches Source2Viewer with the latest dev build. (Updates may take some time)",
+            "source2viewer": f"Launches Source2Viewer with the latest dev build.\n(Updates may take some time)",
 
             "cs2importer": "Port CS:GO maps to CS2.\n\nInspired by:\nsarim-hk\nandreaskeller96",
 
-            "skyboxconverter": "Automate the converting of (CS:GO etc...) cubemap skyboxes to a CS2 compatible format.",
+            "skyboxconverter": "Automate the converting of cubemap skyboxes to a CS2 compatible format.",
             
             "loading_screen": "Automate the adding of Loading Screen Images, Map Icons and Descriptions.",
             
             "point_worldtext": "Create CS:GO style point_worldtext png images.",
             
-            "vtf2png": "Convert CS:GO vtf files to png images."
+            "vtf2png": "Convert CS:GO vtf files to png images.",
+            
+            "sounds": "Make adding custom sounds to CS2 easier."
         }
         
         return tooltips.get(name, "")
@@ -494,15 +595,59 @@ class ImGuiApp:
                 # Use shorter text in compact mode to prevent overlap
                 return ["X"] if self.compact_mode else ["Not installed"]
             
-            # Check if we have a saved commit version
-            s2v_version = versions.get('source2viewer', None)
-            if s2v_version:
-                return [f"Commit: {s2v_version}"]
+            # Try to extract SHA from Product Version in executable
+            local_sha = self.get_s2v_local_sha(s2v_path)
+            if local_sha:
+                # Check if it's the latest version
+                is_latest = self.is_s2v_latest(local_sha, versions.get('source2viewer_latest', ''))
+                # Return SHA with status indicator (will be color-coded in rendering)
+                return [local_sha, "latest" if is_latest else "outdated"]
             
-            # Fallback if installed but no version saved
-            return ["Installed"]
+            # Fallback if can't read SHA
+            return ["Unknown", "unknown"]
         
         return []
+    
+    def get_s2v_local_sha(self, exe_path):
+        """Extract SHA from Source2Viewer.exe Product Version"""
+        if not os.path.exists(exe_path):
+            return None
+        
+        try:
+            import win32api
+            import re
+            
+            # Common locale paths to check for ProductVersion
+            locale_paths = [
+                '\\StringFileInfo\\040904B0\\ProductVersion',
+                '\\StringFileInfo\\000004B0\\ProductVersion',
+                '\\StringFileInfo\\040004B0\\ProductVersion'
+            ]
+            
+            for path in locale_paths:
+                try:
+                    full_version_string = win32api.GetFileVersionInfo(exe_path, path)
+                    # Look for pattern like "+1b65395" in "15.0.5033+1b65395"
+                    match = re.search(r'\+([a-fA-F0-9]{7,8})', full_version_string)
+                    if match:
+                        return match.group(1).upper()
+                except:
+                    continue
+        except:
+            pass
+        
+        return None
+    
+    def is_s2v_latest(self, local_sha, remote_sha):
+        """Check if local SHA matches the latest remote SHA"""
+        if not local_sha or not remote_sha:
+            return False
+        
+        # Compare first 7-8 characters (short SHA)
+        local_short = local_sha[:8].upper()
+        remote_short = remote_sha[:8].upper()
+        
+        return local_short == remote_short
     
     def calculate_window_height(self):
         """Calculate window height based on number of visible buttons"""
@@ -596,33 +741,28 @@ class ImGuiApp:
         # Set window opacity
         glfw.set_window_opacity(self.window, self.window_opacity)
         
-        # Set window icon (using pyGLFW's internal structure)
+        # Set window icon
         icon_path = resource_path(os.path.join("icons", "hammerkz.ico"))
         if os.path.exists(icon_path):
             try:
-                import ctypes
                 icon_img = Image.open(icon_path)
-                icon_img = icon_img.convert("RGBA")
-                width, height = icon_img.size
-                pixels = icon_img.tobytes()
+                if icon_img.mode != 'RGBA':
+                    icon_img = icon_img.convert('RGBA')
                 
-                # Create a simple object to hold the image data
-                class GLFWimage(ctypes.Structure):
-                    _fields_ = [
-                        ('width', ctypes.c_int),
-                        ('height', ctypes.c_int),
-                        ('pixels', ctypes.POINTER(ctypes.c_ubyte))
-                    ]
-                
-                # Convert pixels to ctypes array
-                pixel_data = (ctypes.c_ubyte * len(pixels)).from_buffer_bytearray(bytearray(pixels))
-                
-                image = GLFWimage()
-                image.width = width
-                image.height = height
-                image.pixels = ctypes.cast(pixel_data, ctypes.POINTER(ctypes.c_ubyte))
-                
-                glfw.set_window_icon(self.window, 1, [image])
+                # Try to set window icon - GLFW format varies by version
+                try:
+                    # Try newer format with GLFWimage
+                    from glfw import _GLFWimage
+                    img_buffer = icon_img.tobytes()
+                    img = _GLFWimage()
+                    img.width = icon_img.width
+                    img.height = icon_img.height
+                    img.pixels = img_buffer
+                    glfw.set_window_icon(self.window, 1, img)
+                except:
+                    # Try older list format
+                    icon_data = icon_img.tobytes()
+                    glfw.set_window_icon(self.window, 1, [[icon_img.width, icon_img.height, icon_data]])
             except Exception as e:
                 # Silently fail - icon is nice to have but not critical
                 pass
@@ -630,11 +770,29 @@ class ImGuiApp:
         # Setup ImGui
         imgui.create_context()
         
-        # Load Roboto font
+        # Load font based on theme
         io = imgui.get_io()
-        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
-        if os.path.exists(font_path):
-            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        
+        # Store current theme for font selection
+        current_theme = self.settings.get('appearance_mode', 'grey')
+        self._last_theme_for_font = current_theme  # Initialize tracking
+        
+        # For Dracula theme, try to use Consolas (Windows system font)
+        if current_theme == 'dracula':
+            # Try Consolas first (Windows system font) - use smaller size due to wider characters
+            consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+            if os.path.exists(consolas_path):
+                io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
+            else:
+                # Fallback to Roboto if Consolas not found
+                font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+                if os.path.exists(font_path):
+                    io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        else:
+            # Use Roboto for all other themes
+            font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+            if os.path.exists(font_path):
+                io.fonts.add_font_from_file_ttf(font_path, 15.0)
         
         self.impl = GlfwRenderer(self.window)
         
@@ -652,6 +810,14 @@ class ImGuiApp:
         """Configure ImGui visual style"""
         style = imgui.get_style()
         io = imgui.get_io()
+        
+        # Check if theme changed and requires different font
+        # Flag for reload but don't do it during frame rendering
+        if hasattr(self, '_last_theme_for_font'):
+            old_was_dracula = self._last_theme_for_font == 'dracula'
+            new_is_dracula = self.current_theme == 'dracula'
+            if old_was_dracula != new_is_dracula:
+                self._needs_font_reload = True
         
         # Enable font with better rendering
         io.font_global_scale = 1.0
@@ -747,6 +913,16 @@ class ImGuiApp:
                 'button_active': (0.80, 0.75, 0.25, 1.0),
                 'border': (0.85, 0.80, 0.30, 1.0),
                 'text': (1.0, 1.0, 0.90, 1.0)
+            },
+            'dracula': {
+                'base': imgui.style_colors_dark,
+                'window_bg': (0.157, 0.165, 0.212, 1.0),      # #282a36 (background)
+                'menubar_bg': (0.173, 0.184, 0.235, 1.0),     # #2c2f3c (slightly lighter)
+                'button': (0.271, 0.282, 0.353, 1.0),         # #44475a (current line)
+                'button_hover': (0.506, 0.475, 0.702, 1.0),   # #bd93f9 (purple on hover)
+                'button_active': (0.380, 0.345, 0.580, 1.0),  # #615894 (darker purple)
+                'border': (0.380, 0.396, 0.486, 1.0),         # #61657c (subtle grey-purple)
+                'text': (0.973, 0.973, 0.949, 1.0)            # #f8f8f2 (white text)
             }
         }
         
@@ -808,6 +984,7 @@ class ImGuiApp:
             "vtf2png": "vtf2png.ico",
             "loading_screen": "loading.ico",
             "point_worldtext": "text.ico",
+            "sounds": "sounds.ico",
             "title_icon": "hammerkz.ico"  # Icon for title bar
         }
         
@@ -1029,31 +1206,67 @@ class ImGuiApp:
                             
                             draw_list.add_text(version_x, version_y, version_color, version_text)
                     else:
-                        # For Source2Viewer: show commit hash, single line on right
-                        version_text = version_lines[0].split(': ')[1] if ': ' in version_lines[0] else version_lines[0]
-                        
-                        # Calculate text width and position on right
-                        text_width = imgui.calc_text_size(version_text).x
-                        version_x = button_max.x - text_width - 8
-                        version_y = button_min.y + (button_height - 10) // 2  # Vertically centered
-                        
-                        # Draw the commit text
-                        draw_list.add_text(version_x, version_y, version_color, version_text)
-                        
-                        # Detect click on commit text to open GitHub commit link
-                        mouse_pos = imgui.get_mouse_pos()
-                        text_height = 10  # Approximate text height with 0.75 scale
-                        if (version_x <= mouse_pos.x <= version_x + text_width and
-                            version_y <= mouse_pos.y <= version_y + text_height):
-                            # Show hand cursor
-                            self.should_show_hand = True
-                            # Check for click
-                            if imgui.is_mouse_clicked(0) and name == 'source2viewer':
-                                # Extract commit hash from version_text
-                                import webbrowser
-                                commit_hash = version_text.strip()
-                                commit_url = f"https://github.com/ValveResourceFormat/ValveResourceFormat/commit/{commit_hash}"
-                                webbrowser.open(commit_url)
+                        # For Source2Viewer: show commit hash with color coding
+                        if len(version_lines) == 2:
+                            # First element is SHA, second is status
+                            commit_sha = version_lines[0]
+                            status = version_lines[1]
+                            
+                            # Color based on status
+                            if status == "latest":
+                                # Green for latest
+                                sha_color = imgui.get_color_u32_rgba(0.3, 0.8, 0.3, 1)
+                            elif status == "outdated":
+                                # Orange for outdated
+                                sha_color = imgui.get_color_u32_rgba(1.0, 0.6, 0.2, 1)
+                            else:
+                                # Default dimmed color for unknown
+                                sha_color = version_color
+                            
+                            # Calculate text width and position on right
+                            text_width = imgui.calc_text_size(commit_sha).x
+                            version_x = button_max.x - text_width - 8
+                            version_y = button_min.y + (button_height - 10) // 2  # Vertically centered
+                            
+                            # Draw the commit SHA with status color
+                            draw_list.add_text(version_x, version_y, sha_color, commit_sha)
+                            
+                            # Detect click to open GitHub
+                            mouse_pos = imgui.get_mouse_pos()
+                            text_height = 10
+                            if (version_x <= mouse_pos.x <= version_x + text_width and
+                                version_y <= mouse_pos.y <= version_y + text_height):
+                                self.should_show_hand = True
+                                if imgui.is_mouse_clicked(0) and name == 'source2viewer':
+                                    import webbrowser
+                                    commit_url = f"https://github.com/ValveResourceFormat/ValveResourceFormat/commit/{commit_sha}"
+                                    webbrowser.open(commit_url)
+                        else:
+                            # Single line fallback (commit hash only)
+                            version_text = version_lines[0]
+                            
+                            # Calculate text width and position on right
+                            text_width = imgui.calc_text_size(version_text).x
+                            version_x = button_max.x - text_width - 8
+                            version_y = button_min.y + (button_height - 10) // 2  # Vertically centered
+                            
+                            # Draw the commit text
+                            draw_list.add_text(version_x, version_y, version_color, version_text)
+                            
+                            # Detect click on commit text to open GitHub commit link
+                            mouse_pos = imgui.get_mouse_pos()
+                            text_height = 10  # Approximate text height with 0.75 scale
+                            if (version_x <= mouse_pos.x <= version_x + text_width and
+                                version_y <= mouse_pos.y <= version_y + text_height):
+                                # Show hand cursor
+                                self.should_show_hand = True
+                                # Check for click
+                                if imgui.is_mouse_clicked(0) and name == 'source2viewer':
+                                    # Extract commit hash from version_text
+                                    import webbrowser
+                                    commit_hash = version_text.strip()
+                                    commit_url = f"https://github.com/ValveResourceFormat/ValveResourceFormat/commit/{commit_hash}"
+                                    webbrowser.open(commit_url)
                     
                     io.font_global_scale = original_scale
             else:
@@ -1089,7 +1302,8 @@ class ImGuiApp:
                 if icon_key and icon_key in self.button_icons:
                     texture = self.button_icons[icon_key]
                     icon_x = button_min.x + 12
-                    icon_y = content_y_start + (button_height - 28 - icon_size) // 2
+                    # Position icon to start at the same height as text (flush with text)
+                    icon_y = content_y_start + 4
                     
                     # Draw icon with reduced alpha if disabled
                     if is_disabled:
@@ -1399,7 +1613,8 @@ class ImGuiApp:
                     ("skyboxconverter", "SkyboxConverter"),
                     ("vtf2png", "VTF to PNG"),
                     ("loading_screen", "Loading Screen Stuff"),
-                    ("point_worldtext", "point_worldtext")
+                    ("point_worldtext", "point_worldtext"),
+                    ("sounds", "Sounds Manager")
                 ]:
                     clicked, new_state = imgui.menu_item(
                         label, None, self.button_visibility[name]
@@ -1494,8 +1709,12 @@ class ImGuiApp:
                 imgui.end_menu()
             
             # Settings menu
-            menu_width = 200  # Fixed width for Settings menu
-            imgui.push_style_var(imgui.STYLE_ITEM_INNER_SPACING, (0, 4))  # Minimize spacing between text and checkbox in menu items
+            # In compact mode, make menu wider and position it more to the left
+            if self.compact_mode:
+                menu_width = 220  # Wider menu for compact mode
+            else:
+                menu_width = 220  # Fixed width for Settings menu in non-compact mode
+            imgui.push_style_var(imgui.STYLE_ITEM_INNER_SPACING, (15, 4))  # Spacing between text and checkbox in menu items
             imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (2, 12))  # Reduce window padding to fit content
             imgui.set_next_window_size(menu_width, 0)
             settings_menu_open = imgui.begin_menu("Settings")
@@ -1511,7 +1730,7 @@ class ImGuiApp:
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
                 if theme_menu_open:
-                    themes = ['Grey', 'Black', 'White', 'Pink', 'Orange', 'Blue', 'Red', 'Green', 'Yellow']
+                    themes = ['Grey', 'Black', 'White', 'Pink', 'Orange', 'Blue', 'Red', 'Green', 'Yellow', 'Dracula']
                     for theme_name in themes:
                         theme_key = theme_name.lower()
                         is_selected = self.current_theme == theme_key
@@ -1661,6 +1880,19 @@ class ImGuiApp:
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 
+                imgui.separator()
+                
+                # Verify Game Files
+                if imgui.menu_item("Manually Verify Files")[0]:
+                    self.verify_game_files()
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Restore modified game files to\noriginal state from GitHub\nTracker")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
                 imgui.end_menu()
             imgui.pop_style_var(2)  # Pop both style variables
             
@@ -1760,7 +1992,8 @@ class ImGuiApp:
             "skyboxconverter": ("Skybox\nConverter", "skyboxconverter"),
             "vtf2png": ("VTF to PNG", "vtf2png"),
             "loading_screen": ("Loading\nScreen", "loading_screen"),
-            "point_worldtext": ("point_worldtext", "point_worldtext")
+            "point_worldtext": ("point_worldtext", "point_worldtext"),
+            "sounds": ("Sounds", "sounds")
         }
         
         # Render buttons in order, 3 columns for non-compact or 1 column for compact mode
@@ -1903,7 +2136,8 @@ class ImGuiApp:
                         "SkyboxConverter.exe": "scripts/skybox_gui.py",
                         "VTF2PNG.exe": "scripts/vtf2png_gui.py",
                         "LoadingScreenCreator.exe": "scripts/creator_gui.py",
-                        "PointWorldText.exe": "scripts/pointworldtext.py"
+                        "PointWorldText.exe": "scripts/pointworldtext.py",
+                        "Sounds.exe": "scripts/sounds.py"
                     }
                     script_path = script_map.get(exe_name)
                     if script_path:
@@ -2012,6 +2246,10 @@ class ImGuiApp:
         elif button_name == "point_worldtext":
             # GUI app - extract and run bundled executable
             run_gui_executable("PointWorldText.exe")
+        
+        elif button_name == "sounds":
+            # GUI app - extract and run bundled executable
+            run_gui_executable("Sounds.exe")
     
     def run(self):
         """Main application loop"""
@@ -2051,6 +2289,33 @@ class ImGuiApp:
                     # Stop dragging when mouse released
                     self.dragging_window = False
             
+            # Handle font reload if needed (must be done BEFORE new_frame)
+            if hasattr(self, '_needs_font_reload') and self._needs_font_reload:
+                io = imgui.get_io()
+                io.fonts.clear()
+                
+                if self.current_theme == 'dracula':
+                    # Try Consolas for Dracula theme - use smaller size due to wider characters
+                    consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+                    if os.path.exists(consolas_path):
+                        io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
+                    else:
+                        # Fallback to Roboto
+                        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+                        if os.path.exists(font_path):
+                            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                else:
+                    # Use Roboto for other themes
+                    font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+                    if os.path.exists(font_path):
+                        io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                
+                # Rebuild font atlas
+                self.impl.refresh_font_texture()
+                
+                self._last_theme_for_font = self.current_theme
+                self._needs_font_reload = False
+            
             # Start ImGui frame first
             imgui.new_frame()
             
@@ -2089,6 +2354,17 @@ class ImGuiApp:
     
     def cleanup(self):
         """Cleanup resources"""
+        # Clean up Source2Viewer download flag if it exists
+        temp_dir = tempfile.gettempdir()
+        app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
+        download_flag = os.path.join(app_dir, '.s2v_downloading')
+        try:
+            if os.path.exists(download_flag):
+                os.remove(download_flag)
+                print("Cleaned up download flag")
+        except Exception as e:
+            print(f"Could not remove download flag: {e}")
+        
         # Destroy custom cursors
         if self.arrow_cursor:
             glfw.destroy_cursor(self.arrow_cursor)
@@ -2100,9 +2376,6 @@ class ImGuiApp:
 
 
 if __name__ == "__main__":
-    print("CS2KZ Mapping Tools - PyImGui Version")
-    print("=" * 50)
-    
     try:
         app = ImGuiApp()
         app.run()

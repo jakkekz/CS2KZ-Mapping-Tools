@@ -194,8 +194,9 @@ def download_and_install(new_version):
                             key, value = line.strip().split('=', 1)
                             versions[key] = value
             
-            # Update Source2Viewer version
+            # Update Source2Viewer version (this is now the latest)
             versions['source2viewer'] = new_version
+            versions['source2viewer_latest'] = new_version  # Store latest known version
             
             # Write back all versions
             with open(version_file, 'w') as f:

@@ -20,6 +20,15 @@ except ImportError:
     print("Warning: vtf2img library not found. VTF files will not be supported.")
     print("Install with: pip install vtf2img")
 
+# Helper function for PyInstaller resource paths
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 # Face order for the skybox
 TARGET_SLOTS = ['up', 'left', 'front', 'right', 'back', 'down']
 
@@ -38,6 +47,14 @@ def select_skybox_files():
     """Open dialog to select all 6 skybox face images at once"""
     root = tk.Tk()
     root.withdraw()  # Hide the main window
+    
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "skybox.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
     
     # Show instructions
     messagebox.showinfo(
@@ -63,7 +80,7 @@ def select_skybox_files():
     )
     
     if not file_paths:
-        messagebox.showerror("Cancelled", "No files selected. Aborting.")
+        # User cancelled, just return None without showing error
         return None
     
     if len(file_paths) != 6:
@@ -81,12 +98,12 @@ def select_skybox_files():
         for face in TARGET_SLOTS:
             # Common abbreviations for each face
             face_patterns = {
-                'up': ['_up.', 'up.', '_up_', 'up_'],
-                'down': ['_down.', 'down.', '_down_', 'down_', '_dn.', 'dn.', '_dn_', 'dn_'],
-                'left': ['_left.', 'left.', '_left_', 'left_', '_lf.', 'lf.', '_lf_', 'lf_'],
-                'right': ['_right.', 'right.', '_right_', 'right_', '_rt.', 'rt.', '_rt_', 'rt_'],
-                'front': ['_front.', 'front.', '_front_', 'front_', '_ft.', 'ft.', '_ft_', 'ft_'],
-                'back': ['_back.', 'back.', '_back_', 'back_', '_bk.', 'bk.', '_bk_', 'bk_']
+                'up': ['_up.', 'up.', '_up_', 'up_', '_pz.', 'pz.', '_pz_', 'pz_'],
+                'down': ['_down.', 'down.', '_down_', 'down_', '_dn.', 'dn.', '_dn_', 'dn_', '_nz.', 'nz.', '_nz_', 'nz_'],
+                'left': ['_left.', 'left.', '_left_', 'left_', '_lf.', 'lf.', '_lf_', 'lf_', '_nx.', 'nx.', '_nx_', 'nx_'],
+                'right': ['_right.', 'right.', '_right_', 'right_', '_rt.', 'rt.', '_rt_', 'rt_', '_px.', 'px.', '_px_', 'px_'],
+                'front': ['_front.', 'front.', '_front_', 'front_', '_ft.', 'ft.', '_ft_', 'ft_', '_ny.', 'ny.', '_ny_', 'ny_'],
+                'back': ['_back.', 'back.', '_back_', 'back_', '_bk.', 'bk.', '_bk_', 'bk_', '_py.', 'py.', '_py_', 'py_']
             }
             
             patterns = face_patterns.get(face, [])
@@ -128,6 +145,14 @@ def ask_vmat_preferences():
     root.withdraw()
     root.attributes('-topmost', True)
     
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "skybox.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
+    
     # Ask about Skybox material
     create_skybox = messagebox.askyesno(
         "Skybox Material",
@@ -150,6 +175,14 @@ def select_output_location():
     """Open dialog to select output file location"""
     root = tk.Tk()
     root.withdraw()
+    
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "skybox.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
     
     # Show instructions
     messagebox.showinfo(
@@ -397,7 +430,8 @@ def main():
     # Select output location
     output_path = select_output_location()
     if not output_path:
-        sys.exit(1)
+        # User cancelled, exit gracefully without showing more dialogs
+        sys.exit(0)
     
     # Stitch the skybox
     success, message = stitch_skybox(files, output_path)
@@ -410,6 +444,14 @@ def main():
     # Show result
     root = tk.Tk()
     root.withdraw()
+    
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "skybox.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
     
     if success:
         # Add VMAT info to success message

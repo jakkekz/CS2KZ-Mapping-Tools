@@ -18,6 +18,15 @@ except ImportError:
     print("Warning: vtf2img library not found. VTF conversion will not work.")
     print("Install with: pip install vtf2img")
 
+# Helper function for PyInstaller resource paths
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 
 def convert_vtf_to_png(vtf_path, output_path=None):
     """
@@ -60,6 +69,14 @@ def select_vtf_files():
     root = tk.Tk()
     root.withdraw()
     
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "vtf2png.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
+    
     file_paths = filedialog.askopenfilenames(
         title="Select VTF files to convert",
         filetypes=[
@@ -78,6 +95,14 @@ def select_output_directory():
     """Open dialog to select output directory"""
     root = tk.Tk()
     root.withdraw()
+    
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "vtf2png.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
     
     dir_path = filedialog.askdirectory(
         title="Select output directory (or Cancel to use same directory as VTF files)"
@@ -134,6 +159,15 @@ def main():
     if not VTF_SUPPORT:
         root = tk.Tk()
         root.withdraw()
+        
+        # Set window icon
+        try:
+            icon_path = resource_path(os.path.join("icons", "vtf2png.ico"))
+            if os.path.exists(icon_path):
+                root.iconbitmap(icon_path)
+        except Exception as e:
+            print(f"Could not set window icon: {e}")
+        
         messagebox.showerror(
             "Missing Library",
             "vtf2img library is not installed.\n\n"
@@ -150,6 +184,14 @@ def main():
     # Ask about output directory
     root = tk.Tk()
     root.withdraw()
+    
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "vtf2png.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
     
     use_custom_dir = messagebox.askyesno(
         "Output Location",
@@ -172,6 +214,14 @@ def main():
     # Show results
     root = tk.Tk()
     root.withdraw()
+    
+    # Set window icon
+    try:
+        icon_path = resource_path(os.path.join("icons", "vtf2png.ico"))
+        if os.path.exists(icon_path):
+            root.iconbitmap(icon_path)
+    except Exception as e:
+        print(f"Could not set window icon: {e}")
     
     result_text = "\n".join(results)
     summary = f"Conversion Complete!\n\nConverted: {converted}\nFailed: {failed}\n\n{result_text}"
