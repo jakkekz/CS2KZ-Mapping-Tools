@@ -79,6 +79,13 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/pointworldtext.py
           
+          # Build Sounds (onedir for faster startup)
+          pyinstaller --onedir --windowed `
+            --name=Sounds `
+            --icon=icons/sounds.ico `
+            --hidden-import=PIL.ImageTk `
+            scripts/sounds.py
+          
           # Create gui_tools directory and move GUI folders there
           New-Item -ItemType Directory -Force -Path gui_tools
           Move-Item -Path dist/CS2Importer -Destination gui_tools/
@@ -86,6 +93,7 @@ jobs:
           Move-Item -Path dist/VTF2PNG -Destination gui_tools/
           Move-Item -Path dist/LoadingScreenCreator -Destination gui_tools/
           Move-Item -Path dist/PointWorldText -Destination gui_tools/
+          Move-Item -Path dist/Sounds -Destination gui_tools/
 
       - name: Build CS2KZMappingTools.exe (One-File)
         run: |

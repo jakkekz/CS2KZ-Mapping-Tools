@@ -407,8 +407,11 @@ class CS2ImporterApp:
         # Setup ImGui
         imgui.create_context()
         
-        # Load Roboto font
+        # Disable imgui.ini file creation (we don't need to save window positions)
         io = imgui.get_io()
+        io.ini_file_name = None  # Disable saving imgui.ini
+        
+        # Load Roboto font
         font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
         if os.path.exists(font_path):
             io.fonts.add_font_from_file_ttf(font_path, 15.0)
