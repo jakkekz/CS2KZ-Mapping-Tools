@@ -10,6 +10,12 @@ import time
 class ThemeManager:
     """Manager to read and monitor theme from main app settings"""
     
+    # Font configuration for each theme
+    FONTS = {
+        'dracula': 'Roboto-Regular.ttf',  # Dracula uses Roboto
+        'default': 'Roboto-Regular.ttf'    # All other themes use Roboto
+    }
+    
     # Dracula theme colors (ImGui format: R, G, B, A as 0.0-1.0)
     THEMES = {
         'grey': {
@@ -165,6 +171,10 @@ class ThemeManager:
     def get_theme_name(self):
         """Get current theme name"""
         return self.current_theme
+    
+    def get_font(self):
+        """Get font filename for current theme"""
+        return self.FONTS.get(self.current_theme, self.FONTS['default'])
     
     def to_hex(self, rgb_tuple):
         """Convert RGB tuple (0-1) to hex color"""

@@ -56,6 +56,7 @@ class CS2ImporterApp:
         self.vmf_folder_to_save = None
         self.addon = ""
         self.map_name = None
+        self.previous_map_name = None  # Track previous map to detect changes
         self.launch_options = "-usebsp"
         
         # UI state
@@ -104,13 +105,19 @@ class CS2ImporterApp:
         self.prerequisites_height = 0  # Track prerequisites section height
         
         # Window dimensions
-        self.base_window_height = 290  # Base height for main UI (increased to add space under GO button)
+        self.base_window_height = 280  # Base height for main UI (increased to add space under GO button)
+        self.helper_text_height = 50  # Height added when BSP is selected (for helper text)
         self.progress_tracking_height = 150  # Height added when showing progress tracking
         self.completed_height = 100  # Height added when import completes (for failed assets section if needed)
-        self.prerequisites_expanded_height = 395  # Height for prerequisites section (increased to prevent GO button cutoff)
+        self.prerequisites_expanded_height = 270  # Height for prerequisites section (increased to prevent GO button cutoff)
         
         # Cursor state
         self.text_input_hovered = False
+        self.link_hovered = False  # Track when hovering over clickable links
+        
+        # Font reload tracking
+        self._last_theme_for_font = None
+        self._needs_font_reload = False
         
         # Button icons (texture IDs will be loaded here)
         self.button_icons = {}
@@ -207,7 +214,7 @@ class CS2ImporterApp:
         # elif "Finished compiling models from pak01" in msg:
         #     self.current_stage = "Finalizing models..."
         elif "Skipping" in msg and "compilation" in msg:
-            self.current_stage = "Skipping asset compilation..."
+            self.current_stage = "Finishing up..."
         elif "Found" in msg and "VMAP files to move" in msg:
             import re
             match = re.search(r'Found (\d+) VMAP files', msg)
@@ -215,11 +222,26 @@ class CS2ImporterApp:
                 self.total_vmaps = int(match.group(1))
                 self.imported_vmaps = 0  # Reset counter
                 self.current_stage = "Moving VMAP files..."
+        elif "Found" in msg and "prefab VMAP file" in msg:
+            # Track prefab VMAP files separately and add to total
+            import re
+            match = re.search(r'Found (\d+) prefab VMAP', msg)
+            if match:
+                prefab_count = int(match.group(1))
+                self.total_vmaps += prefab_count
+                self.current_stage = "Processing VMAP files..."
         elif "-> Moved" in msg and ".vmap" in msg:
+            # Count main VMAP files being moved
+            self.imported_vmaps += 1
+        elif "-> Found" in msg and ".vmap" in msg and "already in maps folder" in msg:
+            # Count main VMAP that was already in maps folder
+            self.imported_vmaps += 1
+        elif msg.strip().startswith("-> ") and ".vmap" in msg and "Moved" not in msg and "Found" not in msg:
+            # Count prefab VMAP listings (they use "  -> filename.vmap" format without "Moved" or "Found")
             self.imported_vmaps += 1
         elif "Successfully imported VMF to VMAP" in msg:
             self.vmap_done = True
-            self.current_stage = "Processing VMAP files..."
+            # Don't change stage here, let the VMAP counting messages handle it
         elif "VMF import process completed" in msg:
             self.current_stage = "Finalizing import..."
         elif "Import complete!" in msg:
@@ -411,10 +433,26 @@ class CS2ImporterApp:
         io = imgui.get_io()
         io.ini_file_name = None  # Disable saving imgui.ini
         
-        # Load Roboto font
-        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
-        if os.path.exists(font_path):
-            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        # Load font based on current theme
+        current_theme = self.theme_manager.get_theme_name()
+        self._last_theme_for_font = current_theme  # Initialize tracking
+        
+        # For Dracula theme, try to use Consolas (Windows system font)
+        if current_theme == 'dracula':
+            # Try Consolas first (Windows system font) - use smaller size due to wider characters
+            consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+            if os.path.exists(consolas_path):
+                io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
+            else:
+                # Fallback to Roboto if Consolas not found
+                font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+                if os.path.exists(font_path):
+                    io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        else:
+            # Use Roboto for all other themes
+            font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+            if os.path.exists(font_path):
+                io.fonts.add_font_from_file_ttf(font_path, 15.0)
         
         self.impl = GlfwRenderer(self.window)
         
@@ -459,6 +497,15 @@ class CS2ImporterApp:
         """Configure ImGui visual style using theme manager"""
         style = imgui.get_style()
         io = imgui.get_io()
+        
+        # Check if theme changed and requires different font
+        # Flag for reload but don't do it during frame rendering
+        if hasattr(self, '_last_theme_for_font'):
+            current_theme = self.theme_manager.get_theme_name()
+            old_was_dracula = self._last_theme_for_font == 'dracula'
+            new_is_dracula = current_theme == 'dracula'
+            if old_was_dracula != new_is_dracula:
+                self._needs_font_reload = True
         
         io.font_global_scale = 1.0
         
@@ -555,7 +602,15 @@ class CS2ImporterApp:
         
         path = path.replace("\\", "/")
         bsp_filename = os.path.basename(path)
-        self.map_name = os.path.splitext(bsp_filename)[0]
+        new_map_name = os.path.splitext(bsp_filename)[0]
+        
+        # Update addon name if it's empty or matches the previous default
+        if not self.addon or self.addon.strip() == "" or self.addon == self.previous_map_name:
+            self.addon = new_map_name
+        
+        # Update tracking
+        self.previous_map_name = new_map_name
+        self.map_name = new_map_name
         
         # Auto-extract BSP using BSPSource
         if not self.extract_bsp(path):
@@ -564,14 +619,16 @@ class CS2ImporterApp:
             self.vmf_status_color = (1.0, 0.0, 0.0, 1.0)
             return
         
-        # Set VMF path to the extracted location in csgo folder
+        # Set VMF path to the extracted location in sdk_content/maps folder
         # BSPSource creates VMF with same name as BSP (no suffix)
         if self.csgo_basefolder:
-            csgo_maps_folder = os.path.join(self.csgo_basefolder.replace("/", "\\"), "csgo", "maps")
-            vmf_path = os.path.join(csgo_maps_folder, f"{self.map_name}.vmf")
+            sdk_content_folder = os.path.join(self.csgo_basefolder.replace("/", "\\"), "sdk_content")
+            sdk_content_maps_folder = os.path.join(sdk_content_folder, "maps")
+            vmf_path = os.path.join(sdk_content_maps_folder, f"{self.map_name}.vmf")
             
             if os.path.exists(vmf_path):
-                self.vmf_folder = csgo_maps_folder.replace("\\", "/")
+                # Store sdk_content path (import script will add \maps itself)
+                self.vmf_folder = sdk_content_folder.replace("\\", "/")
                 self.vmf_path_display = f"{self.map_name}.vmf (extracted)"
                 self.vmf_status_color = (0.0, 1.0, 0.0, 1.0)
                 self.vmf_default_path = os.path.dirname(path)
@@ -778,26 +835,41 @@ viewsettings
                 csgo_maps = os.path.join(csgo_dir, "maps")
                 csgo_materials = os.path.join(csgo_dir, "materials")
                 
-                # VMF file path (already defined above)
-                csgo_vmf = os.path.join(csgo_maps, os.path.basename(temp_vmf))  # Move it to maps folder for the importer
+                # Use sdk_content/maps for VMF (where CS:GO Hammer expects it and where importer will look)
+                sdk_content_maps = os.path.join(base_dir, "sdk_content", "maps")
                 
-                # Move VMF file
+                # VMF file goes to sdk_content/maps only
+                sdk_vmf = os.path.join(sdk_content_maps, os.path.basename(temp_vmf))
+                
+                # Move VMF file to sdk_content/maps
                 if os.path.exists(temp_vmf):
-                    os.makedirs(csgo_maps, exist_ok=True)
-                    shutil.copy2(temp_vmf, csgo_vmf)
-                    self.log(f"Copied {os.path.basename(temp_vmf)} to csgo/maps/")
+                    # Create directory
+                    os.makedirs(sdk_content_maps, exist_ok=True)
+                    
+                    # Copy to sdk_content/maps
+                    shutil.copy2(temp_vmf, sdk_vmf)
+                    self.log(f"Copied {os.path.basename(temp_vmf)} to sdk_content/maps/")
                     
                     # Fix VMF structure for CS2 importer compatibility
-                    self.fix_vmf_structure(csgo_vmf)
+                    self.fix_vmf_structure(sdk_vmf)
                 
-                # Move maps folder contents (nav files)
+                # Move maps folder contents (nav files, bsp files, but NOT vmf)
                 if os.path.exists(temp_maps):
                     os.makedirs(csgo_maps, exist_ok=True)
+                    os.makedirs(sdk_content_maps, exist_ok=True)
                     for item in os.listdir(temp_maps):
                         src = os.path.join(temp_maps, item)
-                        dst = os.path.join(csgo_maps, item)
+                        dst_csgo = os.path.join(csgo_maps, item)
+                        dst_sdk = os.path.join(sdk_content_maps, item)
                         if os.path.isfile(src):
-                            shutil.copy2(src, dst)
+                            # Skip VMF files - they should only be in sdk_content/maps
+                            if item.endswith('.vmf'):
+                                continue
+                            # Copy NAV files to csgo/maps
+                            shutil.copy2(src, dst_csgo)
+                            # Also copy BSP and NAV files to sdk_content/maps
+                            if item.endswith(('.bsp', '.nav')):
+                                shutil.copy2(src, dst_sdk)
                             self.log(f"Copied {item} to csgo/maps/")
                 
                 # Move models folder contents (embedded custom models)
@@ -895,22 +967,23 @@ viewsettings
                 except Exception as e:
                     self.log(f"Warning: Could not clean up temp directory: {e}")
                 
-                # Copy the original BSP file to csgo/maps so source1import can use it with -usebsp
-                # This preserves the face culling from the original BSP
+                # Copy the original BSP file to sdk_content/maps (where VMF is located)
+                # This allows source1import to use it with -usebsp flag for optimized face culling
+                # and keeps BSP alongside VMF for CS:GO Hammer convenience
                 self.log(f"Copying original BSP file for optimized import...")
                 try:
-                    bsp_dest = os.path.join(csgo_maps, map_base_name + ".bsp")
-                    if os.path.exists(bsp_dest):
-                        os.remove(bsp_dest)
-                    shutil.copy2(bsp_path, bsp_dest)
-                    self.log(f"✓ Copied BSP file to: {bsp_dest}")
+                    bsp_dest_sdk = os.path.join(sdk_content_maps, map_base_name + ".bsp")
+                    if os.path.exists(bsp_dest_sdk):
+                        os.remove(bsp_dest_sdk)
+                    shutil.copy2(bsp_path, bsp_dest_sdk)
+                    self.log(f"✓ Copied BSP file to: {bsp_dest_sdk}")
                 except Exception as e:
                     self.log(f"⚠ Could not copy BSP file: {e}")
                     self.log("  Will compile VMF to BSP during import (may take longer)")
                 
                 # Check if VMF was successfully moved
-                if os.path.exists(csgo_vmf):
-                    self.log(f"✓ VMF found at: {csgo_vmf}")
+                if os.path.exists(sdk_vmf):
+                    self.log(f"✓ VMF found at: {sdk_vmf}")
                     self.log("✓ Extraction completed successfully")
                     self.in_bspsrc_extraction = False  # End BSPSrc extraction tracking
                     return True
@@ -1037,15 +1110,29 @@ viewsettings
             
             self.save_to_cfg()
 
+            # Clean up any VMF files from csgo/maps to avoid conflicts
+            # VMF files should only exist in sdk_content/maps
+            csgo_maps_dir = os.path.join(self.csgo_basefolder, 'csgo', 'maps')
+            if os.path.exists(csgo_maps_dir):
+                vmf_in_csgo = os.path.join(csgo_maps_dir, self.map_name + '.vmf')
+                if os.path.exists(vmf_in_csgo):
+                    try:
+                        os.remove(vmf_in_csgo)
+                        self.log(f"Removed conflicting VMF from csgo/maps/")
+                    except Exception as e:
+                        self.log(f"Warning: Could not remove VMF from csgo/maps: {e}")
+
             cd = os.path.join(self.csgo_basefolder, 'game', 'csgo', 'import_scripts').replace("/", "\\")
             
             # Get the path to our custom import script using resource_path for PyInstaller compatibility
             jakke_script = resource_path(os.path.join('scripts', 'porting', 'import_map_community_jakke.py')).replace("/", "\\")
             
             # Build command using our custom script with unbuffered output
+            # Pass sdk_content as the content directory (where VMF and BSP are located)
+            sdk_content_dir = os.path.join(self.csgo_basefolder, 'sdk_content').replace("/", "\\")
             command = f'python -u "{jakke_script}" '
             command += '"' + os.path.join(self.csgo_basefolder, 'csgo').replace("/", "\\") + '" '
-            command += '"' + self.vmf_folder.replace("/", "\\") + '" '
+            command += '"' + sdk_content_dir + '" '
             command += '"' + os.path.join(self.csgo_basefolder, 'game', 'csgo').replace("/", "\\") + '" '
             command += self.addon + ' '
             command += self.map_name + ' '
@@ -1252,16 +1339,24 @@ viewsettings
         
         # Dynamically resize window based on prerequisites, progress tracking, and completed state
         current_height = self.base_window_height
-        current_width = 275
+        current_width = 240
+        
+        # Add height for helper text if BSP is selected
+        if self.vmf_status_color == (0.0, 1.0, 0.0, 1.0):  # Green = success
+            current_height += self.helper_text_height
+        
         if prerequisites_opened:
             current_height += self.prerequisites_expanded_height
-            current_width = 400  # Slightly wider for prerequisites text
+            current_width = 330  # Slightly wider for prerequisites text
         if self.import_in_progress:
             current_height += self.progress_tracking_height
-            current_width = max(current_width, 345)  # Ensure wide enough for progress bar
+            # Keep the same width as current state (prereqs open or closed)
+            if not prerequisites_opened:
+                current_width = 240  # Match normal width
+            # else: keep 340 from prerequisites
         if self.import_completed:
             current_height += self.completed_height
-            current_width = max(current_width, 345)  # Enough for Copy All button and stats
+            current_width = max(current_width, 275)  # Back to normal width when complete
         
         current_window_size = glfw.get_window_size(self.window)
         
@@ -1270,19 +1365,6 @@ viewsettings
         
         if prerequisites_opened:
             imgui.push_text_wrap_pos(imgui.get_content_region_available_width())
-            
-            # Known bugs
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.8, 0.2, 1.0)  # Yellow text
-            imgui.text_wrapped("Note: Some known bugs include:")
-            imgui.pop_style_color()
-            
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.6, 0.6, 1.0)  # Light red
-            imgui.bullet_text("Doesnt port toolsskybox")
-            imgui.pop_style_color()
-            
-            imgui.spacing()
-            imgui.separator()
-            imgui.spacing()
             
             # Step 1
             imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 1.0, 1.0, 1.0)  # White
@@ -1308,7 +1390,7 @@ viewsettings
             imgui.push_style_color(imgui.COLOR_TEXT, 0.8, 0.8, 0.8, 1.0)
             imgui.bullet_text("IF your map has displacements go ahead and")
             imgui.text("     open the .vmf in CSGO hammer and save it")
-            imgui.bullet_text("The .vmf is decompiled to \"csgo/maps\"")
+            imgui.bullet_text("The .vmf is decompiled to \"sdk_content/maps\"")
             imgui.pop_style_color()
             
             imgui.spacing()
@@ -1337,10 +1419,48 @@ viewsettings
         
         # Display VMF path below button with smaller text
         imgui.push_style_color(imgui.COLOR_TEXT, *self.vmf_status_color)
-        imgui.set_window_font_scale(0.85)  # Make text smaller
+        imgui.set_window_font_scale(1)  # Make text smaller
         imgui.text_wrapped(self.vmf_path_display)
         imgui.set_window_font_scale(1.0)  # Reset font scale
         imgui.pop_style_color()
+        
+        # Show helper text if VMF was successfully extracted
+        if self.vmf_status_color == (0.0, 1.0, 0.0, 1.0):  # Green = success
+            imgui.set_window_font_scale(1)
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Gray
+            imgui.text("If map has displacements,")
+            imgui.pop_style_color()
+            
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Gray
+            imgui.text("open it in ")
+            imgui.pop_style_color()
+            imgui.same_line(spacing=0)
+            
+            # Clickable "CS:GO Hammer" link using text with hover detection
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.5, 0.8, 1.0, 1.0)  # Blue
+            imgui.text("CS:GO Hammer")
+            self.link_hovered = imgui.is_item_hovered()  # Track hover state for cursor
+            if self.link_hovered:
+                # Handle click
+                if imgui.is_mouse_clicked(0):
+                    # Open SDK Launcher
+                    if self.csgo_basefolder:
+                        sdk_launcher = os.path.join(self.csgo_basefolder, "bin", "sdklauncher.exe")
+                        if os.path.exists(sdk_launcher):
+                            try:
+                                os.startfile(sdk_launcher)
+                                self.log("✓ Opened CS:GO SDK Launcher")
+                            except Exception as e:
+                                self.log(f"Error opening SDK Launcher: {e}")
+                        else:
+                            self.log(f"SDK Launcher not found at: {sdk_launcher}")
+            imgui.pop_style_color()
+            imgui.same_line(spacing=0)
+            
+            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Gray
+            imgui.text(" and save it")
+            imgui.pop_style_color()
+            imgui.set_window_font_scale(1.0)
         
         imgui.spacing()
         imgui.spacing()
@@ -1403,9 +1523,34 @@ viewsettings
             imgui.text(self.current_stage)
             imgui.pop_style_color()
             
-            # Progress bar
+            # Progress bar with text shadow
             imgui.push_style_color(imgui.COLOR_PLOT_HISTOGRAM, 0.2, 0.8, 0.2, 1.0)  # Green
-            imgui.progress_bar(progress, (250, 0), f"{int(progress * 100)}%")
+            
+            # Get progress bar position before drawing it
+            cursor_pos = imgui.get_cursor_screen_pos()
+            progress_width = 200  # Match "Select BSP File" button width
+            progress_height = imgui.get_frame_height()
+            
+            # Draw the progress bar (without overlay text)
+            imgui.progress_bar(progress, (progress_width, 0), "")
+            
+            # Draw text with shadow on top of progress bar
+            draw_list = imgui.get_window_draw_list()
+            percentage_text = f"{int(progress * 100)}%"
+            
+            # Calculate text size and center position
+            text_size = imgui.calc_text_size(percentage_text)
+            text_x = cursor_pos.x + (progress_width - text_size.x) / 2
+            text_y = cursor_pos.y + (progress_height - text_size.y) / 2
+            
+            # Draw shadow (slightly offset)
+            shadow_color = imgui.get_color_u32_rgba(0.0, 0.0, 0.0, 0.5)
+            draw_list.add_text(text_x + 1, text_y + 1, shadow_color, percentage_text)
+            
+            # Draw white text on top
+            text_color = imgui.get_color_u32_rgba(1.0, 1.0, 1.0, 1.0)
+            draw_list.add_text(text_x, text_y, text_color, percentage_text)
+            
             imgui.pop_style_color()
             
             # Details
@@ -1414,10 +1559,12 @@ viewsettings
                 imgui.text(f"Materials: {self.imported_materials}/{self.total_materials}")
             if self.total_models > 0:
                 imgui.text(f"Models: {self.imported_models}/{self.total_models}")
+            # Always show VMAP count if we have one, even after completion
             if self.total_vmaps > 0:
                 imgui.text(f"VMAPs: {self.imported_vmaps}/{self.total_vmaps}")
             elif self.vmap_done:
-                imgui.text("VMAP: ✓ Complete")
+                # Only show "Complete" if we never got a count
+                imgui.text("VMAP: Complete")
             imgui.set_window_font_scale(1.0)
         
         # Open Log button (only show after import is completed)
@@ -1426,17 +1573,20 @@ viewsettings
             imgui.separator()
             imgui.spacing()
             
+            # Open Log button
             imgui.push_style_color(imgui.COLOR_BUTTON, 0.2, 0.5, 0.8, 1.0)  # Blue
             imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.6, 0.9, 1.0)  # Lighter blue
             imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.4, 0.7, 1.0)  # Darker blue
             
-            if imgui.button("Open Log", width=75, height=30):
+            # Store cursor position after Open Log button for stats alignment
+            cursor_y_start = imgui.get_cursor_pos_y()
+            
+            if imgui.button("Open Log", width=85, height=30):
                 self.open_log_file()
             
             imgui.pop_style_color(3)
             
-            # Open Addon button
-            imgui.same_line()
+            # Open Folder button (below Open Log)
             imgui.push_style_color(imgui.COLOR_BUTTON, 0.8, 0.7, 0.2, 1.0)  # Yellow
             imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.9, 0.8, 0.3, 1.0)  # Lighter yellow
             imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.7, 0.6, 0.15, 1.0)  # Darker yellow
@@ -1446,10 +1596,10 @@ viewsettings
             
             imgui.pop_style_color(3)
             
-            # Display import stats to the right of Open Log button
-            imgui.same_line()
+            # Display import stats to the right of buttons, aligned with Open Log
+            imgui.set_cursor_pos((105, cursor_y_start))
             imgui.begin_group()
-            imgui.set_window_font_scale(1)
+            imgui.set_window_font_scale(0.85)
             imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Grey text
             imgui.text(f"Materials: {self.imported_materials}/{self.total_materials}")
             imgui.text(f"Models: {self.imported_models}/{self.total_models}")
@@ -1460,13 +1610,6 @@ viewsettings
             imgui.pop_style_color()
             imgui.set_window_font_scale(1.0)
             imgui.end_group()
-        
-        # Show "wait..." text during import
-        if self.import_in_progress:
-            imgui.same_line()
-            imgui.push_style_color(imgui.COLOR_TEXT, 1.0, 0.8, 0.2, 1.0)  # Yellow
-            imgui.text("wait...")
-            imgui.pop_style_color()
         
         # Only show console output section after import is completed
         if self.import_completed:
@@ -1545,6 +1688,35 @@ viewsettings
                 else:
                     self.dragging_window = False
             
+            # Handle font reload if needed (must be done BEFORE new_frame)
+            if hasattr(self, '_needs_font_reload') and self._needs_font_reload:
+                io = imgui.get_io()
+                io.fonts.clear()
+                
+                current_theme = self.theme_manager.get_theme_name()
+                
+                if current_theme == 'dracula':
+                    # Try Consolas for Dracula theme - use smaller size due to wider characters
+                    consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+                    if os.path.exists(consolas_path):
+                        io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
+                    else:
+                        # Fallback to Roboto
+                        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+                        if os.path.exists(font_path):
+                            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                else:
+                    # Use Roboto for other themes
+                    font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
+                    if os.path.exists(font_path):
+                        io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                
+                # Rebuild font atlas
+                self.impl.refresh_font_texture()
+                
+                self._last_theme_for_font = current_theme
+                self._needs_font_reload = False
+            
             imgui.new_frame()
             
             self.render()
@@ -1560,7 +1732,7 @@ viewsettings
             if self.text_input_hovered or io.want_text_input:
                 # Text input field is active or hovered
                 glfw.set_cursor(self.window, self.ibeam_cursor)
-            elif imgui.is_any_item_hovered():
+            elif self.link_hovered or imgui.is_any_item_hovered():
                 # Clickable item is hovered
                 glfw.set_cursor(self.window, self.hand_cursor)
             else:

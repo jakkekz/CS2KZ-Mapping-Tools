@@ -736,14 +736,14 @@ else:
 		print("Please verify game files integrity in Steam.")
 
 try:
-	# s1contentcsgo already includes \maps, so don't add it again
-	vmf_file_path = s1contentcsgo + "\\" + mapname + ".vmf"
+	# s1contentcsgo is the base content folder (sdk_content), add \maps to get VMF location
+	vmf_file_path = s1contentcsgo + "\\maps\\" + mapname + ".vmf"
 	
 	print("Starting VMF import...")
 	print(f"Using BSP optimization: {usebsp}")
 	
 	# Check if there's an original BSP file we can use for optimized import
-	bsp_file_path = s1contentcsgo + "\\" + mapname + ".bsp"
+	bsp_file_path = s1contentcsgo + "\\maps\\" + mapname + ".bsp"
 	if os.path.exists(bsp_file_path):
 		print(f"[OK] Found original BSP file - will use it for face-culled import: {bsp_file_path}")
 		# Force usebsp to True to use the pre-optimized BSP
@@ -946,8 +946,15 @@ try:
 	# Find all vmap files in the addon content root (not in subdirectories)
 	vmap_pattern = s2contentcsgoimported + "\\*.vmap"
 	vmap_files = glob.glob(vmap_pattern)
-
-	print(f"Found {len(vmap_files)} VMAP files to move to maps folder")
+	
+	# Also check if main map VMAP already exists in maps folder (created by source1import)
+	main_vmap_in_maps = os.path.join(maps_dir, mapname + ".vmap")
+	main_vmap_exists = os.path.exists(main_vmap_in_maps)
+	
+	# Total VMAPs includes: VMAPs to move + main VMAP if it exists in maps folder
+	total_vmap_count = len(vmap_files) + (1 if main_vmap_exists else 0)
+	
+	print(f"Found {total_vmap_count} VMAP files to move to maps folder")
 
 	# Move all vmap files to maps folder
 	for vmap_file in vmap_files:
@@ -961,6 +968,10 @@ try:
 		# Move the file
 		shutil.move(vmap_file, destfile)
 		print(f"  -> Moved {filename}")
+	
+	# If main map VMAP already exists in maps folder, report it as "found"
+	if main_vmap_exists:
+		print(f"  -> Found {mapname}.vmap (already in maps folder)")
 
 	# Move prefabs folder to maps\prefabs\ if it exists
 	# Prefabs should be in maps\prefabs\MAPNAME\ not just prefabs\MAPNAME\
