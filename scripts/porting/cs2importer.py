@@ -629,7 +629,7 @@ class CS2ImporterApp:
             if os.path.exists(vmf_path):
                 # Store sdk_content path (import script will add \maps itself)
                 self.vmf_folder = sdk_content_folder.replace("\\", "/")
-                self.vmf_path_display = f"{self.map_name}.vmf (extracted)"
+                self.vmf_path_display = f"{self.map_name}.vmf (decompiled)"
                 self.vmf_status_color = (0.0, 1.0, 0.0, 1.0)
                 self.vmf_default_path = os.path.dirname(path)
             else:
@@ -1610,6 +1610,10 @@ viewsettings
             imgui.pop_style_color()
             imgui.set_window_font_scale(1.0)
             imgui.end_group()
+            
+            # Add spacing after the buttons/stats section
+            imgui.spacing()
+            imgui.spacing()
         
         # Only show console output section after import is completed
         if self.import_completed:
