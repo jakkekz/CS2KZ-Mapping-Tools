@@ -16,6 +16,7 @@ import shutil
 import threading
 import tempfile
 from scripts.settings_manager import SettingsManager
+from utils.update_checker import UpdateChecker
 
 # Helper function for PyInstaller to find bundled files
 def resource_path(relative_path):
@@ -147,6 +148,11 @@ class ImGuiApp:
         # Cursor state
         self.current_cursor = None
         self.should_show_hand = False
+        
+        # Update checker
+        self.update_checker = UpdateChecker()
+        self.update_available = False
+        self.last_update_check = 0
     
     def set_cursor(self, cursor_type):
         """Set the cursor if it's different from current"""
@@ -201,6 +207,25 @@ class ImGuiApp:
         app_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools')
         download_flag = os.path.join(app_dir, '.s2v_downloading')
         return os.path.exists(download_flag)
+    
+    def check_for_updates(self):
+        """Check for application updates from GitHub Actions"""
+        try:
+            # Check if update checker is available and check for updates
+            if self.update_checker:
+                self.update_available = self.update_checker.check_for_updates()
+        except Exception as e:
+            print(f"Error checking for updates: {e}")
+    
+    def perform_update(self):
+        """Download and install the latest update"""
+        try:
+            if self.update_checker and self.update_available:
+                success = self.update_checker.download_and_install_update()
+                if success:
+                    self.update_checker.restart_application()
+        except Exception as e:
+            print(f"Error performing update: {e}")
     
     def clear_settings(self):
         """Clear saved settings and reset to defaults"""
@@ -985,7 +1010,8 @@ class ImGuiApp:
             "loading_screen": "loading.ico",
             "point_worldtext": "text.ico",
             "sounds": "sounds.ico",
-            "title_icon": "hammerkz.ico"  # Icon for title bar
+            "title_icon": "hammerkz.ico",  # Icon for title bar
+            "update_icon": "update.ico"  # Icon for update notification
         }
         
         for name, filename in icons.items():
@@ -996,8 +1022,10 @@ class ImGuiApp:
                     # Ensure RGBA mode
                     if img.mode != "RGBA":
                         img = img.convert("RGBA")
-                    # Use smaller size for title icon
+                    # Use smaller size for title icon and update icon
                     if name == "title_icon":
+                        img = img.resize((16, 16), Image.Resampling.LANCZOS)
+                    elif name == "update_icon":
                         img = img.resize((16, 16), Image.Resampling.LANCZOS)
                     else:
                         img = img.resize((56, 56), Image.Resampling.LANCZOS)
@@ -1896,6 +1924,36 @@ class ImGuiApp:
                 imgui.end_menu()
             imgui.pop_style_var(2)  # Pop both style variables
             
+            # Update icon - show only when update is available
+            if self.update_available and "update_icon" in self.button_icons:
+                imgui.same_line(spacing=10)
+                
+                # Get icon texture
+                update_texture = self.button_icons["update_icon"]
+                
+                # Create image button with the update icon
+                cursor_pos = imgui.get_cursor_screen_pos()
+                imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + 4)  # Center vertically
+                
+                # Push button styling to match menu items
+                imgui.push_style_color(imgui.COLOR_BUTTON, 0, 0, 0, 0)
+                imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.26, 0.59, 0.98, 0.4)
+                imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.26, 0.59, 0.98, 0.6)
+                
+                if imgui.image_button(update_texture, 16, 16):
+                    # Trigger update when clicked
+                    self.perform_update()
+                
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    imgui.text("Update available!\nClick to download and install\nthe latest version.")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                imgui.pop_style_color(3)
+            
             # Push About to the right side of the menu bar
             # Calculate available space and add spacing
             menu_bar_width = imgui.get_window_width()
@@ -2260,6 +2318,13 @@ class ImGuiApp:
         last_cs2_check = 0
         cs2_check_interval = 2.0  # Check every 2 seconds (reduced overhead)
         
+        # Track time for update checking
+        last_update_check = 0
+        update_check_interval = 300.0  # Check every 5 minutes
+        
+        # Do initial update check on startup
+        threading.Thread(target=self.check_for_updates, daemon=True).start()
+        
         # Track if window has been shown (to prevent black flash)
         window_shown = False
         
@@ -2272,6 +2337,11 @@ class ImGuiApp:
             if current_time - last_cs2_check >= cs2_check_interval:
                 self.cs2_client_running, self.cs2_dedicated_running = self.is_cs2_running()
                 last_cs2_check = current_time
+            
+            # Periodically check for updates (every 5 minutes)
+            if current_time - last_update_check >= update_check_interval:
+                threading.Thread(target=self.check_for_updates, daemon=True).start()
+                last_update_check = current_time
             
             # Reset cursor flags at the start of each frame
             self.should_show_hand = False
