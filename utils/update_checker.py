@@ -168,16 +168,20 @@ class UpdateChecker:
             with open(batch_script, 'w') as f:
                 f.write('@echo off\n')
                 f.write('echo Waiting for application to close...\n')
-                f.write('timeout /t 3 /nobreak > nul\n')  # Wait for main app to close
+                f.write('timeout /t 5 /nobreak > nul\n')  # Wait longer for main app to close
                 f.write(f'echo Replacing executable...\n')
+                # Try to delete the old exe first (in case move fails)
+                f.write(f'del /f /q "{current_exe}" 2>nul\n')
                 f.write(f'move /y "{new_exe_path}" "{current_exe}"\n')
                 f.write(f'if errorlevel 1 (\n')
                 f.write(f'    echo Failed to replace executable\n')
+                f.write(f'    echo Error: %%errorlevel%%\n')
                 f.write(f'    pause\n')
                 f.write(f'    exit /b 1\n')
                 f.write(f')\n')
                 f.write(f'echo Starting updated application...\n')
                 f.write(f'start "" "{current_exe}"\n')
+                f.write(f'timeout /t 2 /nobreak > nul\n')  # Brief delay before cleanup
                 f.write(f'del "%~f0"\n')  # Delete the batch script itself
             
             print("[Update] Launching update script and exiting...")
@@ -186,38 +190,44 @@ class UpdateChecker:
             # Run the batch script with visible window for debugging
             subprocess.Popen(['cmd', '/c', batch_script])
             
-            # Exit the application so the batch script can replace the exe
+            # Force immediate exit
             print("[Update] Exiting application for update...")
-            sys.exit(0)
+            import os as _os
+            _os._exit(0)  # Immediate exit without cleanup
             
         except Exception as e:
             print(f"[Update] Error during update: {e}")
             return False
     
     def _clear_temp_folder(self, temp_dir):
-        """Clear the temp folder but preserve settings"""
+        """Clear the temp folder but preserve settings and Source2Viewer"""
         try:
             if not os.path.exists(temp_dir):
                 return
             
-            # Files/folders to preserve
-            preserve = ['settings.json', 'Source2Viewer-win.exe', 'update']
+            # Files/folders to preserve (include both possible S2V names)
+            preserve = ['settings.json', 'Source2Viewer-win.exe', 'Source2Viewer.exe', 'update']
+            
+            print(f"[Update] Clearing temp folder (preserving: {', '.join(preserve)})")
             
             for item in os.listdir(temp_dir):
                 if item in preserve:
+                    print(f"[Update] Preserving: {item}")
                     continue
                 
                 item_path = os.path.join(temp_dir, item)
                 try:
                     if os.path.isfile(item_path):
                         os.remove(item_path)
+                        print(f"[Update] Removed file: {item}")
                     elif os.path.isdir(item_path):
                         shutil.rmtree(item_path)
+                        print(f"[Update] Removed directory: {item}")
                 except Exception as e:
-                    print(f"Error removing {item_path}: {e}")
+                    print(f"[Update] Warning: Could not remove {item}: {e}")
                     
         except Exception as e:
-            print(f"Error clearing temp folder: {e}")
+            print(f"[Update] Error clearing temp folder: {e}")
     
     def restart_application(self):
         """Restart the application after update"""
