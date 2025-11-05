@@ -167,18 +167,28 @@ class UpdateChecker:
             print(f"[Update] Creating batch script: {batch_script}")
             with open(batch_script, 'w') as f:
                 f.write('@echo off\n')
-                f.write('echo Updating CS2KZ-Mapping-Tools...\n')
-                f.write('timeout /t 2 /nobreak > nul\n')  # Wait for main app to close
+                f.write('echo Waiting for application to close...\n')
+                f.write('timeout /t 3 /nobreak > nul\n')  # Wait for main app to close
+                f.write(f'echo Replacing executable...\n')
                 f.write(f'move /y "{new_exe_path}" "{current_exe}"\n')
+                f.write(f'if errorlevel 1 (\n')
+                f.write(f'    echo Failed to replace executable\n')
+                f.write(f'    pause\n')
+                f.write(f'    exit /b 1\n')
+                f.write(f')\n')
+                f.write(f'echo Starting updated application...\n')
                 f.write(f'start "" "{current_exe}"\n')
                 f.write(f'del "%~f0"\n')  # Delete the batch script itself
             
             print("[Update] Launching update script and exiting...")
-            # Run the batch script and exit
-            subprocess.Popen(['cmd', '/c', batch_script], 
-                           creationflags=subprocess.CREATE_NO_WINDOW)
+            print(f"[Update] Batch script will replace: {current_exe}")
+            print(f"[Update] With new file: {new_exe_path}")
+            # Run the batch script with visible window for debugging
+            subprocess.Popen(['cmd', '/c', batch_script])
             
-            return True
+            # Exit the application so the batch script can replace the exe
+            print("[Update] Exiting application for update...")
+            sys.exit(0)
             
         except Exception as e:
             print(f"[Update] Error during update: {e}")
