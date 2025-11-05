@@ -159,6 +159,6 @@ jobs:
         with:
           files: ./artifacts/CS2KZMappingTools.exe
           tag_name: ${{ env.TAG_NAME }}
-          name: CS2KZ Mapping Tools - Build ${{ env.TAG_NAME }}
+          name: CS2KZ Mapping Tools - ${{ env.TAG_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

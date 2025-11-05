@@ -99,7 +99,7 @@ class UpdateChecker:
                     for asset in assets:
                         name = asset.get('name', '')
                         print(f"[Update] Asset: {name}")
-                        if name.endswith('.exe') and 'CS2KZ-Mapping-Tools' in name:
+                        if name.endswith('.exe') and 'CS2KZ' in name and 'MappingTools' in name:
                             self.update_available = True
                             self.latest_download_url = asset.get('browser_download_url')
                             self.latest_version = release_timestamp
