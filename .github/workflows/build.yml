@@ -147,18 +147,18 @@ jobs:
       - name: Create Tag
         id: create_tag
         run: |
-          TAG_NAME="latest"
+          TAG_NAME="build-$(date +'%Y%m%d-%H%M%S')"
           echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f $TAG_NAME
-          git push -f origin $TAG_NAME
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
 
       - name: Create and Upload Release
         uses: softprops/action-gh-release@v2
         with:
           files: ./artifacts/CS2KZMappingTools.exe
           tag_name: ${{ env.TAG_NAME }}
-          name: CS2KZ Mapping Tools - Latest Build
+          name: CS2KZ Mapping Tools - Build ${{ env.TAG_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
