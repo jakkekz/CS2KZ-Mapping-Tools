@@ -1,6 +1,6 @@
 """
 Update checker for CS2KZ-Mapping-Tools
-Checks GitHub Releases for new versions and manages update process
+Checks GitHub Releases for new versions and manages update process!
 """
 
 import os
