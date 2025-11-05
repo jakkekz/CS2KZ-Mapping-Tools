@@ -1011,7 +1011,8 @@ class ImGuiApp:
             "point_worldtext": "text.ico",
             "sounds": "sounds.ico",
             "title_icon": "hammerkz.ico",  # Icon for title bar
-            "update_icon": "update.ico"  # Icon for update notification
+            "update_icon": "update.ico",  # Icon for update available
+            "updatenot_icon": "updatenot.ico"  # Icon for no update
         }
         
         for name, filename in icons.items():
@@ -1924,45 +1925,52 @@ class ImGuiApp:
                 imgui.end_menu()
             imgui.pop_style_var(2)  # Pop both style variables
             
-            # Update icon - show only when update is available
-            if self.update_available and "update_icon" in self.button_icons:
-                imgui.same_line(spacing=10)
-                
-                # Get icon texture
-                update_texture = self.button_icons["update_icon"]
-                
-                # Create image button with the update icon
-                cursor_pos = imgui.get_cursor_screen_pos()
-                imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + 4)  # Center vertically
-                
-                # Push button styling to match menu items
-                imgui.push_style_color(imgui.COLOR_BUTTON, 0, 0, 0, 0)
-                imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.26, 0.59, 0.98, 0.4)
-                imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.26, 0.59, 0.98, 0.6)
-                
-                if imgui.image_button(update_texture, 16, 16):
-                    # Trigger update when clicked
-                    self.perform_update()
-                
-                if imgui.is_item_hovered():
-                    self.should_show_hand = True
-                    imgui.begin_tooltip()
-                    imgui.push_text_wrap_pos(250)
-                    imgui.text("Update available!\nClick to download and install\nthe latest version.")
-                    imgui.pop_text_wrap_pos()
-                    imgui.end_tooltip()
-                
-                imgui.pop_style_color(3)
-            
             # Push About to the right side of the menu bar
             # Calculate available space and add spacing
             menu_bar_width = imgui.get_window_width()
             cursor_x = imgui.get_cursor_pos_x()
             about_width = imgui.calc_text_size("About").x + 20  # Add padding
-            spacing = menu_bar_width - cursor_x - about_width
+            update_icon_width = 16 + 8  # Icon width + small spacing
+            spacing = menu_bar_width - cursor_x - about_width - update_icon_width
             
             if spacing > 0:
                 imgui.set_cursor_pos_x(cursor_x + spacing)
+            
+            # Update icon - switch between updatenot.ico and update.ico based on availability
+            if "update_icon" in self.button_icons and "updatenot_icon" in self.button_icons:
+                # Choose icon based on update availability
+                if self.update_available:
+                    update_texture = self.button_icons["update_icon"]
+                else:
+                    update_texture = self.button_icons["updatenot_icon"]
+                
+                # Save current Y position
+                current_y = imgui.get_cursor_pos_y()
+                
+                # Align vertically with menu text (center the 16px icon with text line height)
+                y_offset = (imgui.get_frame_height() - 16) / 2
+                imgui.set_cursor_pos_y(current_y + y_offset)
+                
+                # Render as plain image (clickable)
+                imgui.image(update_texture, 16, 16)
+                
+                # Check if clicked
+                if imgui.is_item_hovered():
+                    self.should_show_hand = True
+                    if imgui.is_mouse_clicked(0) and self.update_available:
+                        self.perform_update()
+                    
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(250)
+                    if self.update_available:
+                        imgui.text("Update available!\nClick to download and install\nthe latest version.")
+                    else:
+                        imgui.text("Checking for updates...\nNo update available yet.")
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+                
+                imgui.same_line(spacing=8)  # Small spacing before About menu
+                imgui.set_cursor_pos_y(current_y)  # Restore Y position for About menu
             
             # About menu (now on the right)
             about_menu_open = imgui.begin_menu("About")
@@ -2320,7 +2328,7 @@ class ImGuiApp:
         
         # Track time for update checking
         last_update_check = 0
-        update_check_interval = 300.0  # Check every 5 minutes
+        update_check_interval = 60.0  # Check every 1 minute (for testing)
         
         # Do initial update check on startup
         threading.Thread(target=self.check_for_updates, daemon=True).start()
@@ -2338,7 +2346,7 @@ class ImGuiApp:
                 self.cs2_client_running, self.cs2_dedicated_running = self.is_cs2_running()
                 last_cs2_check = current_time
             
-            # Periodically check for updates (every 5 minutes)
+            # Periodically check for updates (every 1 minute)
             if current_time - last_update_check >= update_check_interval:
                 threading.Thread(target=self.check_for_updates, daemon=True).start()
                 last_update_check = current_time

@@ -32,29 +32,38 @@ class UpdateChecker:
             if hasattr(sys, '_MEIPASS'):
                 # Running as PyInstaller executable
                 exe_path = sys.executable
-                return os.path.getmtime(exe_path)
+                timestamp = os.path.getmtime(exe_path)
+                print(f"[Update] Running as executable: {exe_path}")
+                print(f"[Update] Executable timestamp: {timestamp}")
+                return timestamp
             else:
                 # Running as script - use main.py timestamp
                 main_py = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-                return os.path.getmtime(main_py)
+                timestamp = os.path.getmtime(main_py)
+                print(f"[Update] Running as script: {main_py}")
+                print(f"[Update] Script timestamp: {timestamp}")
+                return timestamp
         except Exception as e:
-            print(f"Error getting current version: {e}")
+            print(f"[Update] Error getting current version: {e}")
             return 0
     
     def should_check_for_updates(self):
-        """Check if enough time has passed since last check (5 minutes)"""
+        """Check if enough time has passed since last check (1 minute)"""
         if self.last_check_time is None:
             return True
         
         time_since_check = time.time() - self.last_check_time
-        return time_since_check >= 300  # 5 minutes in seconds
+        return time_since_check >= 60  # 1 minute in seconds (for testing)
     
     def check_for_updates(self):
         """Check GitHub Releases for new versions"""
         if not self.should_check_for_updates():
+            print(f"[Update] Skipping check - last checked {time.time() - self.last_check_time:.0f}s ago")
             return self.update_available
         
         self.last_check_time = time.time()
+        print(f"[Update] Checking for updates from GitHub Releases...")
+        print(f"[Update] Current version timestamp: {self.current_version}")
         
         try:
             # Get the latest release from GitHub
@@ -63,74 +72,99 @@ class UpdateChecker:
                 headers={'Accept': 'application/vnd.github.v3+json'}
             )
             
+            print(f"[Update] Fetching: {self.github_releases_api}")
             with urllib.request.urlopen(req, timeout=10) as response:
                 data = json.loads(response.read().decode())
                 
                 # Get release information
                 published_at = data.get('published_at', '')
+                release_tag = data.get('tag_name', 'unknown')
+                print(f"[Update] Latest release: {release_tag} published at {published_at}")
+                
                 if not published_at:
+                    print("[Update] No published_at field in release")
                     return False
                 
                 # Parse release timestamp
                 release_time = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
                 release_timestamp = release_time.timestamp()
+                print(f"[Update] Release timestamp: {release_timestamp}")
                 
                 # Compare with current version
                 if release_timestamp > self.current_version:
+                    print(f"[Update] Release is newer! ({release_timestamp} > {self.current_version})")
                     # Find the .exe asset
                     assets = data.get('assets', [])
+                    print(f"[Update] Found {len(assets)} assets")
                     for asset in assets:
                         name = asset.get('name', '')
+                        print(f"[Update] Asset: {name}")
                         if name.endswith('.exe') and 'CS2KZ-Mapping-Tools' in name:
                             self.update_available = True
                             self.latest_download_url = asset.get('browser_download_url')
                             self.latest_version = release_timestamp
+                            print(f"[Update] ✓ Update available! {name}")
+                            print(f"[Update] Download URL: {self.latest_download_url}")
                             return True
+                    print("[Update] No matching .exe asset found")
+                else:
+                    print(f"[Update] Release is not newer ({release_timestamp} <= {self.current_version})")
                 
         except urllib.error.URLError as e:
-            print(f"Network error checking for updates: {e}")
+            print(f"[Update] Network error: {e}")
         except Exception as e:
-            print(f"Error checking for updates: {e}")
+            print(f"[Update] Error: {e}")
         
         self.update_available = False
+        print("[Update] No update available")
         return False
     
     def download_and_install_update(self):
         """Download the latest version and replace the current executable"""
         if not self.update_available or not self.latest_download_url:
+            print("[Update] No update available or no download URL")
             return False
         
         try:
+            print(f"[Update] Starting update process...")
             # Get temp directory
             temp_dir = os.path.join(tempfile.gettempdir(), ".cs2kz-mapping-tools")
             update_dir = os.path.join(temp_dir, "update")
             
             # Create update directory
             os.makedirs(update_dir, exist_ok=True)
+            print(f"[Update] Update directory: {update_dir}")
             
             # Download the new executable
             new_exe_path = os.path.join(update_dir, "CS2KZ-Mapping-Tools-new.exe")
             
-            print(f"Downloading update from {self.latest_download_url}...")
+            print(f"[Update] Downloading from {self.latest_download_url}...")
             urllib.request.urlretrieve(self.latest_download_url, new_exe_path)
+            print(f"[Update] Downloaded to {new_exe_path}")
             
             if not os.path.exists(new_exe_path):
-                print("Failed to download update")
+                print("[Update] Failed to download update - file doesn't exist")
                 return False
             
+            file_size = os.path.getsize(new_exe_path)
+            print(f"[Update] Downloaded file size: {file_size} bytes")
+            
             # Clear temp folder (except settings and Source2Viewer)
+            print("[Update] Clearing temp folder...")
             self._clear_temp_folder(temp_dir)
             
             # Get current executable path
             if hasattr(sys, '_MEIPASS'):
                 current_exe = sys.executable
+                print(f"[Update] Current executable: {current_exe}")
             else:
                 # Running as script - can't update
-                print("Update only works for compiled executable")
+                print("[Update] Running as script - update only works for compiled executable")
                 return False
             
             # Create a batch script to replace the executable
             batch_script = os.path.join(update_dir, "update.bat")
+            print(f"[Update] Creating batch script: {batch_script}")
             with open(batch_script, 'w') as f:
                 f.write('@echo off\n')
                 f.write('echo Updating CS2KZ-Mapping-Tools...\n')
@@ -139,6 +173,7 @@ class UpdateChecker:
                 f.write(f'start "" "{current_exe}"\n')
                 f.write(f'del "%~f0"\n')  # Delete the batch script itself
             
+            print("[Update] Launching update script and exiting...")
             # Run the batch script and exit
             subprocess.Popen(['cmd', '/c', batch_script], 
                            creationflags=subprocess.CREATE_NO_WINDOW)
@@ -146,7 +181,7 @@ class UpdateChecker:
             return True
             
         except Exception as e:
-            print(f"Error during update: {e}")
+            print(f"[Update] Error during update: {e}")
             return False
     
     def _clear_temp_folder(self, temp_dir):
