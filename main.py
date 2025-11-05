@@ -1,6 +1,6 @@
 """
 PyImGui version of CS2KZ Mapping Tools
-Full-featured version with all capabilities from the original
+Full-featured version with all capabilities from the original!
 """
 
 import imgui
