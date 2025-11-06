@@ -48,12 +48,12 @@ class UpdateChecker:
             return 0
     
     def should_check_for_updates(self):
-        """Check if enough time has passed since last check (1 minute)"""
+        """Check if enough time has passed since last check (5 minutes)"""
         if self.last_check_time is None:
             return True
         
         time_since_check = time.time() - self.last_check_time
-        return time_since_check >= 60  # 1 minute in seconds (for testing)
+        return time_since_check >= 150  # 2.5 minutes in seconds
     
     def check_for_updates(self):
         """Check GitHub Releases for new versions"""

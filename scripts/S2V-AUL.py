@@ -284,6 +284,35 @@ def main():
             sys.exit(1)
     else:
         print("\nLocal version is up-to-date. No update necessary.")
+        
+        # Update the cache file with current version info
+        version_file = os.path.join(BASE_PATH, 'cs2kz_versions.txt')
+        versions = {}
+        
+        # Read existing versions
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            versions[key.strip()] = value.strip()
+            except Exception as e:
+                print(f"Warning: Could not read version file: {e}")
+        
+        # Update Source2Viewer version info
+        versions['source2viewer'] = local_version
+        versions['source2viewer_latest'] = remote_version
+        
+        # Write back to file
+        try:
+            with open(version_file, 'w') as f:
+                for key, value in versions.items():
+                    f.write(f"{key}={value}\n")
+            print(f"Updated version cache: source2viewer={local_version}, source2viewer_latest={remote_version}")
+        except Exception as e:
+            print(f"Warning: Could not update version file: {e}")
 
 
     # This call will launch Source2Viewer non-blockingly and return immediately.

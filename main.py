@@ -2347,7 +2347,7 @@ class ImGuiApp:
         
         # Track time for update checking
         last_update_check = 0
-        update_check_interval = 60.0  # Check every 1 minute (for testing)
+        update_check_interval = 150.0  # Check every X minutes
         
         # Do initial update check on startup
         threading.Thread(target=self.check_for_updates, daemon=True).start()
@@ -2365,7 +2365,7 @@ class ImGuiApp:
                 self.cs2_client_running, self.cs2_dedicated_running = self.is_cs2_running()
                 last_cs2_check = current_time
             
-            # Periodically check for updates (every 1 minute)
+            # Periodically check for updates (every 5 minutes)
             if current_time - last_update_check >= update_check_interval:
                 threading.Thread(target=self.check_for_updates, daemon=True).start()
                 last_update_check = current_time
