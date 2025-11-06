@@ -186,8 +186,17 @@ class UpdateChecker:
                 f.write(f'    pause\n')
                 f.write(f'    exit /b 1\n')
                 f.write(f')\n')
-                f.write(f'echo Starting updated application...\n')
-                f.write(f'start "" "{current_exe}"\n')
+                f.write(f'echo Update successful!\n')
+                f.write(f'echo Starting updated application: {current_exe}\n')
+                f.write(f'echo.\n')
+                # Use full path and proper quoting for start command
+                f.write(f'cd /d "{os.path.dirname(current_exe)}"\n')
+                f.write(f'start "" "{os.path.basename(current_exe)}"\n')
+                f.write(f'if errorlevel 1 (\n')
+                f.write(f'    echo Failed to start application\n')
+                f.write(f'    echo Trying alternate method...\n')
+                f.write(f'    "{current_exe}"\n')
+                f.write(f')\n')
                 f.write(f'timeout /t 2 /nobreak > nul\n')  # Brief delay before cleanup
                 f.write(f'del "%~f0"\n')  # Delete the batch script itself
             
