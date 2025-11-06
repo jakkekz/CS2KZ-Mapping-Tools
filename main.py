@@ -1931,7 +1931,8 @@ class ImGuiApp:
             cursor_x = imgui.get_cursor_pos_x()
             about_width = imgui.calc_text_size("About").x + 20  # Add padding
             update_icon_width = 16 + 8  # Icon width + small spacing
-            spacing = menu_bar_width - cursor_x - about_width - update_icon_width
+            right_padding = 10  # Extra padding to prevent cutoff
+            spacing = menu_bar_width - cursor_x - about_width - update_icon_width - right_padding
             
             if spacing > 0:
                 imgui.set_cursor_pos_x(cursor_x + spacing)
