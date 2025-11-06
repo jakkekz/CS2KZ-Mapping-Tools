@@ -64,6 +64,7 @@ jobs:
             --name=LoadingScreenCreator `
             --icon=icons/loading.ico `
             --add-data="scripts;scripts" `
+            --add-data="utils;utils" `
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=PIL.ImageFont `

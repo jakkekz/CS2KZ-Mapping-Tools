@@ -1965,9 +1965,35 @@ class ImGuiApp:
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(250)
                     if self.update_available:
-                        imgui.text("Update available!\nClick to download and install\nthe latest version.")
+                        imgui.text("Update available!")
+                        imgui.text("")
+                        if self.update_checker.latest_version_tag:
+                            imgui.text("New version:")
+                            imgui.text(self.update_checker.latest_version_tag)
+                        if self.update_checker.latest_version_date:
+                            date_str = self.update_checker.latest_version_date.strftime("%Y-%m-%d")
+                            time_str = self.update_checker.latest_version_date.strftime("%H:%M")
+                            imgui.text(date_str)
+                            imgui.text(time_str)
+                        imgui.text("")
+                        if self.update_checker.current_version_date:
+                            current_date_str = self.update_checker.current_version_date.strftime("%Y-%m-%d")
+                            current_time_str = self.update_checker.current_version_date.strftime("%H:%M")
+                            imgui.text("Current version:")
+                            imgui.text(current_date_str)
+                            imgui.text(current_time_str)
+                        imgui.text("")
+                        imgui.text("Click to download")
+                        imgui.text("and install")
                     else:
-                        imgui.text("Checking for updates...\nNo update available yet.")
+                        imgui.text("No update available")
+                        if self.update_checker and self.update_checker.current_version_date:
+                            imgui.text("")
+                            current_date_str = self.update_checker.current_version_date.strftime("%Y-%m-%d")
+                            current_time_str = self.update_checker.current_version_date.strftime("%H:%M")
+                            imgui.text("Current version:")
+                            imgui.text(current_date_str)
+                            imgui.text(current_time_str)
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
                 

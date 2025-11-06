@@ -19,11 +19,14 @@ class UpdateChecker:
         """Initialize the update checker"""
         self.github_repo = "jakkekz/CS2KZ-Mapping-Tools"
         self.github_releases_api = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
-        self.current_version = self._get_current_version()
         self.last_check_time = None
         self.update_available = False
         self.latest_download_url = None
         self.latest_version = None
+        self.latest_version_tag = None
+        self.latest_version_date = None
+        self.current_version_date = None
+        self.current_version = self._get_current_version()
         
     def _get_current_version(self):
         """Get the current version from the executable or a version file"""
@@ -33,6 +36,7 @@ class UpdateChecker:
                 # Running as PyInstaller executable
                 exe_path = sys.executable
                 timestamp = os.path.getmtime(exe_path)
+                self.current_version_date = datetime.fromtimestamp(timestamp)
                 print(f"[Update] Running as executable: {exe_path}")
                 print(f"[Update] Executable timestamp: {timestamp}")
                 return timestamp
@@ -40,6 +44,7 @@ class UpdateChecker:
                 # Running as script - use main.py timestamp
                 main_py = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
                 timestamp = os.path.getmtime(main_py)
+                self.current_version_date = datetime.fromtimestamp(timestamp)
                 print(f"[Update] Running as script: {main_py}")
                 print(f"[Update] Script timestamp: {timestamp}")
                 return timestamp
@@ -48,7 +53,7 @@ class UpdateChecker:
             return 0
     
     def should_check_for_updates(self):
-        """Check if enough time has passed since last check (5 minutes)"""
+        """Check if enough time has passed since last check (X minutes)"""
         if self.last_check_time is None:
             return True
         
@@ -103,6 +108,8 @@ class UpdateChecker:
                             self.update_available = True
                             self.latest_download_url = asset.get('browser_download_url')
                             self.latest_version = release_timestamp
+                            self.latest_version_tag = release_tag
+                            self.latest_version_date = release_time
                             print(f"[Update] ✓ Update available! {name}")
                             print(f"[Update] Download URL: {self.latest_download_url}")
                             return True

@@ -58,37 +58,69 @@ def get_cs2_path():
         print(f"Failed to get CS2 path: {e}")
     return None
 
-def handle_compiled_files(game_root, map_name):
+def handle_compiled_files(game_root, map_name, addon_name):
     """
     Finds and renames the compiled VMAT, VTEX, and VSVG files, then removes original compiled files.
     """
     print("\nHandling compiled files...")
-    game_addons_dir = os.path.join(game_root, 'game', 'csgo_addons', map_name)
-    content_addons_dir = os.path.join(game_root, 'content', 'csgo_addons', map_name)
+    print(f"Game root: {game_root}")
+    print(f"Map name: {map_name}")
+    print(f"Addon name: {addon_name}")
+    
+    game_addons_dir = os.path.join(game_root, 'game', 'csgo_addons', addon_name)
+    content_addons_dir = os.path.join(game_root, 'content', 'csgo_addons', addon_name)
     
     # Define the base directory for compiled materials and textures
     compiled_screenshots_dir = os.path.join(game_addons_dir, 'panorama', 'images', 'map_icons', 'screenshots', '1080p')
     compiled_icons_dir = os.path.join(game_addons_dir, 'panorama', 'images', 'map_icons')
     
-    # Handle compiled screenshot files (.vmat_c, .vtex_c)
+    print(f"Compiled screenshots dir: {compiled_screenshots_dir}")
+    print(f"Directory exists: {os.path.exists(compiled_screenshots_dir)}")
+        # Handle compiled screenshot files (.vmat_c, .vtex_c)
     if os.path.exists(compiled_screenshots_dir):
-        files_to_handle = glob.glob(os.path.join(compiled_screenshots_dir, f"{map_name}_*_png_*.vmat_c")) + \
-                          glob.glob(os.path.join(compiled_screenshots_dir, f"{map_name}_*_png_*.vtex_c"))
+        print(f"Looking in: {compiled_screenshots_dir}")
+        print(f"Map name: {map_name}")
         
+        # List all files in the directory for debugging
+        all_files = glob.glob(os.path.join(compiled_screenshots_dir, "*.*"))
+        print(f"All files in directory: {[os.path.basename(f) for f in all_files]}")
+        
+        files_to_handle = glob.glob(os.path.join(compiled_screenshots_dir, f"{map_name}_*_png_*.vmat_c")) + \
+                          glob.glob(os.path.join(compiled_screenshots_dir, f"{map_name}_*_png_*.vtex_c")) + \
+                          glob.glob(os.path.join(compiled_screenshots_dir, f"*_png_*.vmat_c")) + \
+                          glob.glob(os.path.join(compiled_screenshots_dir, f"*_png_*.vtex_c"))
+        
+        # Remove duplicates
+        files_to_handle = list(set(files_to_handle))
+        
+        print(f"Found {len(files_to_handle)} compiled files to rename")
         for file_path in files_to_handle:
             file_name = os.path.basename(file_path)
-            parts = file_name.split('_png_')
-            if len(parts) > 1:
-                new_name = parts[0] + "_png" + file_name[file_name.rfind('.'):]
-                new_file_path = os.path.join(compiled_screenshots_dir, new_name)
-                
-                # Check if the destination file exists and remove it before renaming
-                if os.path.exists(new_file_path):
-                    os.remove(new_file_path)
-                    print(f"Overwrote existing file: {new_name}")
-                
-                os.rename(file_path, new_file_path)
-                print(f"Renamed {file_name} to {new_name}")
+            print(f"Processing: {file_name}")
+            
+            # Remove the hash part added by the compiler
+            # e.g., kz_avalon_5_png_png_7be1bfec.vtex_c -> kz_avalon_5_png.vtex_c
+            if '_png_' in file_name:
+                # Split on the last occurrence of '_png_' to remove the hash
+                parts = file_name.rsplit('_png_', 1)
+                if len(parts) > 1:
+                    # Get the extension (.vmat_c or .vtex_c)
+                    ext = os.path.splitext(file_name)[1]
+                    new_name = parts[0] + ext
+                    print(f"Renaming to: {new_name}")
+                    new_file_path = os.path.join(compiled_screenshots_dir, new_name)
+                    
+                    # Check if the destination file exists and remove it before renaming
+                    if os.path.exists(new_file_path):
+                        os.remove(new_file_path)
+                        print(f"Overwrote existing file: {new_name}")
+                    
+                    os.rename(file_path, new_file_path)
+                    print(f"Successfully renamed {file_name} to {new_name}")
+                else:
+                    print(f"Warning: Could not split filename properly: {file_name}")
+            else:
+                print(f"Warning: '_png_' not found in filename: {file_name}")
 
     # Handle compiled SVG file (.vsvg_c)
     if os.path.exists(compiled_icons_dir):
@@ -129,10 +161,14 @@ def handle_compiled_files(game_root, map_name):
         except OSError as e:
             print(f"Error removing file {file}: {e}")
 
-def compile_vmat_files(game_root, vmat_files, map_name):
+def compile_vmat_files(game_root, vmat_files, map_name, addon_name=None):
     """
     Compiles a list of .vmat files using resourcecompiler.exe.
     """
+    # If addon_name not provided, use map_name for backwards compatibility
+    if addon_name is None:
+        addon_name = map_name
+    
     compiler_path = os.path.join(game_root, 'game', 'bin', 'win64', 'resourcecompiler.exe')
     if not os.path.exists(compiler_path):
         print(f"Error: resourcecompiler.exe not found at {compiler_path}")
@@ -170,12 +206,15 @@ def compile_vmat_files(game_root, vmat_files, map_name):
             break
 
     # After all files are compiled successfully, handle the compiled files
-    handle_compiled_files(game_root, map_name)
+    handle_compiled_files(game_root, map_name, addon_name)
 
-def compile_svg_files(game_root, svg_files, map_name):
+def compile_svg_files(game_root, svg_files, map_name, addon_name=None):
     """
     Compiles a list of .svg files using resourcecompiler.exe.
     """
+    # If addon_name not provided, use map_name for backwards compatibility
+    if addon_name is None:
+        addon_name = map_name
     compiler_path = os.path.join(game_root, 'game', 'bin', 'win64', 'resourcecompiler.exe')
     if not os.path.exists(compiler_path):
         print(f"Error: resourcecompiler.exe not found at {compiler_path}")

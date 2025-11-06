@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox
 import os
 import sys
 import subprocess
+import ctypes
 from pathlib import Path
 from PIL import Image, ImageTk
 
@@ -72,10 +73,7 @@ class LoadingScreenCreatorGUI:
         except Exception as e:
             print(f"Could not set window icon: {e}")
         
-        # Remove default title bar
-        self.root.overrideredirect(True)
-        
-        # Window size and position
+        # Window size and position - set BEFORE overrideredirect
         window_width = 480
         window_height = 775  # Increased to fit all content including Go button
         screen_width = self.root.winfo_screenwidth()
@@ -84,6 +82,15 @@ class LoadingScreenCreatorGUI:
         y = (screen_height - window_height) // 2
         self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
         self.root.resizable(False, False)
+        
+        # Update window to ensure it's created
+        self.root.update_idletasks()
+        
+        # Remove default title bar but keep in taskbar
+        self.root.overrideredirect(True)
+        
+        # Set taskbar button immediately (before window is fully shown)
+        self.root.after(10, self._set_taskbar_button)
         
         # Apply dark theme
         self.root.configure(bg=DARK_BG)
@@ -116,6 +123,35 @@ class LoadingScreenCreatorGUI:
         x = self.root.winfo_x() + event.x - self._drag_start_x
         y = self.root.winfo_y() + event.y - self._drag_start_y
         self.root.geometry(f"+{x}+{y}")
+    
+    def _set_taskbar_button(self):
+        """Force the window to appear in the Windows taskbar using Win32 API"""
+        try:
+            # Get window handle
+            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            
+            # Constants for window styles
+            GWL_EXSTYLE = -20
+            WS_EX_APPWINDOW = 0x00040000
+            WS_EX_TOOLWINDOW = 0x00000080
+            
+            # Get current extended window style
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            
+            # Remove tool window style and add app window style
+            style = style & ~WS_EX_TOOLWINDOW
+            style = style | WS_EX_APPWINDOW
+            
+            # Set the new style
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            
+            # Show in taskbar without flashing - use ShowWindow instead
+            SW_HIDE = 0
+            SW_SHOW = 5
+            ctypes.windll.user32.ShowWindow(hwnd, SW_HIDE)
+            ctypes.windll.user32.ShowWindow(hwnd, SW_SHOW)
+        except Exception as e:
+            print(f"Could not set taskbar button: {e}")
     
     def minimize_window(self):
         # Store window position before minimizing
@@ -162,19 +198,39 @@ class LoadingScreenCreatorGUI:
         # Apply to root window if it exists
         if hasattr(self, 'root') and self.root.winfo_exists():
             self.root.configure(bg=DARK_BG)
-            
-            # Update title bar widgets if they exist
-            for widget in self.root.winfo_children():
-                if isinstance(widget, tk.Frame) and widget.winfo_height() == TITLE_BAR_HEIGHT:
-                    # Found title bar
+            self._update_widget_colors(self.root)
+    
+    def _update_widget_colors(self, widget):
+        """Recursively update all widget colors"""
+        try:
+            if isinstance(widget, tk.Frame):
+                # Check if it's the title bar (first frame)
+                if widget.winfo_height() == TITLE_BAR_HEIGHT or widget == widget.master.winfo_children()[0]:
                     widget.configure(bg=TITLE_BAR_BG)
-                    # Update all child widgets in title bar
-                    for child in widget.winfo_children():
-                        if isinstance(child, (tk.Label, tk.Button)):
-                            try:
-                                child.configure(bg=TITLE_BAR_BG, fg=DARK_TEXT)
-                            except:
-                                pass
+                else:
+                    widget.configure(bg=DARK_BG)
+            elif isinstance(widget, tk.Label):
+                parent = widget.master
+                if isinstance(parent, tk.Frame) and (parent.winfo_height() == TITLE_BAR_HEIGHT or parent == parent.master.winfo_children()[0]):
+                    widget.configure(bg=TITLE_BAR_BG, fg=DARK_TEXT)
+                else:
+                    widget.configure(bg=DARK_BG, fg=DARK_TEXT)
+            elif isinstance(widget, tk.Button):
+                parent = widget.master
+                if isinstance(parent, tk.Frame) and (parent.winfo_height() == TITLE_BAR_HEIGHT or parent == parent.master.winfo_children()[0]):
+                    widget.configure(bg=TITLE_BAR_BG, fg=DARK_TEXT, activebackground=DARK_BUTTON_HOVER)
+                else:
+                    widget.configure(bg=DARK_BUTTON, fg=DARK_TEXT, activebackground=DARK_BUTTON_HOVER)
+            elif isinstance(widget, tk.Entry):
+                widget.configure(bg=DARK_FRAME, fg=DARK_TEXT, insertbackground=DARK_TEXT, disabledbackground=DARK_FRAME, disabledforeground=DARK_TEXT)
+            elif isinstance(widget, tk.Text):
+                widget.configure(bg=DARK_FRAME, fg=DARK_TEXT, insertbackground=DARK_TEXT)
+            
+            # Recursively update children
+            for child in widget.winfo_children():
+                self._update_widget_colors(child)
+        except:
+            pass
     
     def check_theme_updates(self):
         """Check for theme updates and reapply if needed"""
@@ -594,7 +650,10 @@ class LoadingScreenCreatorGUI:
                 svg_files_to_compile.append(dest_icon_path)
             
             # Process description text
-            description_text = self.description_text.get("1.0", tk.END).strip()
+            description_text = self.description_text.get("1.0", tk.END)
+            # Remove only the trailing newline that tkinter adds, but preserve leading/intentional whitespace
+            if description_text.endswith('\n'):
+                description_text = description_text[:-1]
             if description_text:
                 description_file_name = f"{map_name}.txt"
                 description_file_path = os.path.join(maps_dir, description_file_name)
@@ -603,11 +662,11 @@ class LoadingScreenCreatorGUI:
             
             # Compile VMAT files
             if vmat_files_to_compile:
-                compile_vmat_files(self.cs2_path, vmat_files_to_compile, map_name)
+                compile_vmat_files(self.cs2_path, vmat_files_to_compile, map_name, addon_name)
             
             # Compile SVG files
             if svg_files_to_compile:
-                compile_svg_files(self.cs2_path, svg_files_to_compile, map_name)
+                compile_svg_files(self.cs2_path, svg_files_to_compile, map_name, addon_name)
             
             messagebox.showinfo(
                 "Success",
