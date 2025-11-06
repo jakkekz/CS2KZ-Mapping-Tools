@@ -1012,7 +1012,8 @@ class ImGuiApp:
             "sounds": "sounds.ico",
             "title_icon": "hammerkz.ico",  # Icon for title bar
             "update_icon": "update.ico",  # Icon for update available
-            "updatenot_icon": "updatenot.ico"  # Icon for no update
+            "updatenot_icon": "updatenot.ico",  # Icon for no update
+            "info_icon": "icon.ico"  # Icon for About menu
         }
         
         for name, filename in icons.items():
@@ -1925,14 +1926,14 @@ class ImGuiApp:
                 imgui.end_menu()
             imgui.pop_style_var(2)  # Pop both style variables
             
-            # Push About to the right side of the menu bar
+            # Push icons to the right side of the menu bar
             # Calculate available space and add spacing
             menu_bar_width = imgui.get_window_width()
             cursor_x = imgui.get_cursor_pos_x()
-            about_width = imgui.calc_text_size("About").x + 20  # Add padding
-            update_icon_width = 16 + 8  # Icon width + small spacing
+            info_icon_width = 16  # Info icon width
+            update_icon_width = 16 + 8  # Update icon width + spacing between icons
             right_padding = 10  # Extra padding to prevent cutoff
-            spacing = menu_bar_width - cursor_x - about_width - update_icon_width - right_padding
+            spacing = menu_bar_width - cursor_x - info_icon_width - update_icon_width - right_padding
             
             if spacing > 0:
                 imgui.set_cursor_pos_x(cursor_x + spacing)
@@ -1973,37 +1974,54 @@ class ImGuiApp:
                 imgui.same_line(spacing=8)  # Small spacing before About menu
                 imgui.set_cursor_pos_y(current_y)  # Restore Y position for About menu
             
-            # About menu (now on the right)
-            about_menu_open = imgui.begin_menu("About")
-            if imgui.is_item_hovered():
-                self.should_show_hand = True
-            if about_menu_open:
-                # Credits with clickable names
-                draw_list = imgui.get_window_draw_list()
+            # About menu using info icon instead of text
+            if "info_icon" in self.button_icons:
+                info_texture = self.button_icons["info_icon"]
                 
-                imgui.text("Made by ")
-                imgui.same_line(spacing=0)
+                # Save current Y position
+                current_y = imgui.get_cursor_pos_y()
                 
-                # jakke link - use selectable with exact width for inline layout
-                jakke_width = imgui.calc_text_size("jakke").x
-                jakke_clicked = imgui.selectable("jakke", False, flags=imgui.SELECTABLE_DONT_CLOSE_POPUPS, width=jakke_width)[0]
+                # Align vertically with menu text
+                y_offset = (imgui.get_frame_height() - 16) / 2
+                imgui.set_cursor_pos_y(current_y + y_offset)
+                
+                # Render info icon as plain image
+                imgui.image(info_texture, 16, 16)
+                
+                # Check if clicked to open menu
                 if imgui.is_item_hovered():
                     self.should_show_hand = True
-                if jakke_clicked:
-                    import webbrowser
-                    import threading
-                    threading.Thread(target=lambda: webbrowser.open("http://steamcommunity.com/profiles/76561197981712950"), daemon=True).start()
+                    if imgui.is_mouse_clicked(0):
+                        imgui.open_popup("about_popup")
                 
-                # Open Github link
-                github_clicked = imgui.menu_item("Open Github")[0]
-                if imgui.is_item_hovered():
-                    self.should_show_hand = True
-                if github_clicked:
-                    import webbrowser
-                    import threading
-                    threading.Thread(target=lambda: webbrowser.open("https://github.com/jakkekz/CS2KZ-Mapping-Tools"), daemon=True).start()
+                imgui.set_cursor_pos_y(current_y)  # Restore Y position
                 
-                imgui.end_menu()
+                # About popup menu
+                if imgui.begin_popup("about_popup"):
+                    # Credits with clickable names
+                    imgui.text("Made by ")
+                    imgui.same_line(spacing=0)
+                    
+                    # jakke link - use selectable with exact width for inline layout
+                    jakke_width = imgui.calc_text_size("jakke").x
+                    jakke_clicked = imgui.selectable("jakke", False, flags=imgui.SELECTABLE_DONT_CLOSE_POPUPS, width=jakke_width)[0]
+                    if imgui.is_item_hovered():
+                        self.should_show_hand = True
+                    if jakke_clicked:
+                        import webbrowser
+                        import threading
+                        threading.Thread(target=lambda: webbrowser.open("http://steamcommunity.com/profiles/76561197981712950"), daemon=True).start()
+                    
+                    # Open Github link
+                    github_clicked = imgui.menu_item("Open Github")[0]
+                    if imgui.is_item_hovered():
+                        self.should_show_hand = True
+                    if github_clicked:
+                        import webbrowser
+                        import threading
+                        threading.Thread(target=lambda: webbrowser.open("https://github.com/jakkekz/CS2KZ-Mapping-Tools"), daemon=True).start()
+                    
+                    imgui.end_popup()
             
             imgui.end_menu_bar()
     
