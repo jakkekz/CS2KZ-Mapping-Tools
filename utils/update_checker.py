@@ -36,17 +36,21 @@ class UpdateChecker:
                 # Running as PyInstaller executable
                 exe_path = sys.executable
                 timestamp = os.path.getmtime(exe_path)
+                # Store as UTC datetime for consistency with GitHub API
                 self.current_version_date = datetime.fromtimestamp(timestamp)
                 print(f"[Update] Running as executable: {exe_path}")
-                print(f"[Update] Executable timestamp: {timestamp}")
+                print(f"[Update] Executable timestamp (UTC): {timestamp}")
+                print(f"[Update] Executable date (local): {self.current_version_date}")
                 return timestamp
             else:
                 # Running as script - use main.py timestamp
                 main_py = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
                 timestamp = os.path.getmtime(main_py)
+                # Store as UTC datetime for consistency with GitHub API
                 self.current_version_date = datetime.fromtimestamp(timestamp)
                 print(f"[Update] Running as script: {main_py}")
-                print(f"[Update] Script timestamp: {timestamp}")
+                print(f"[Update] Script timestamp (UTC): {timestamp}")
+                print(f"[Update] Script date (local): {self.current_version_date}")
                 return timestamp
         except Exception as e:
             print(f"[Update] Error getting current version: {e}")
