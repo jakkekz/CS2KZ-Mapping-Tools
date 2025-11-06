@@ -29,8 +29,15 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 # Import theme manager after resource_path is defined
-sys.path.insert(0, resource_path('utils'))
-from theme_manager import ThemeManager
+# For PyInstaller, use resource_path; for script execution, use parent directory
+if hasattr(sys, '_MEIPASS'):
+    # Running as PyInstaller executable
+    sys.path.insert(0, resource_path('utils'))
+    from theme_manager import ThemeManager
+else:
+    # Running as script
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    from utils.theme_manager import ThemeManager
 
 # CustomTkinter-like dark theme colors (defaults - will be overridden by theme manager)
 DARK_BG = "#1a1a1a"  # Window background (0.1, 0.1, 0.1)
