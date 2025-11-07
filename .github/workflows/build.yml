@@ -85,6 +85,8 @@ jobs:
             --name=Sounds `
             --icon=icons/sounds.ico `
             --hidden-import=PIL.ImageTk `
+            --collect-all imgui `
+            --collect-all glfw `
             scripts/sounds.py
           
           # Create gui_tools directory and move GUI folders there

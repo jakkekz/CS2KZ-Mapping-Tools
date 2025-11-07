@@ -2104,7 +2104,7 @@ class ImGuiApp:
             "vtf2png": ("VTF to PNG", "vtf2png"),
             "loading_screen": ("Loading\nScreen", "loading_screen"),
             "point_worldtext": ("point_worldtext", "point_worldtext"),
-            "sounds": ("Sounds", "sounds")
+            "sounds": ("Sound\nManager", "sounds")
         }
         
         # Render buttons in order, 3 columns for non-compact or 1 column for compact mode
