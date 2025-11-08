@@ -802,22 +802,15 @@ class ImGuiApp:
         current_theme = self.settings.get('appearance_mode', 'grey')
         self._last_theme_for_font = current_theme  # Initialize tracking
         
-        # For Dracula theme, try to use Consolas (Windows system font)
-        if current_theme == 'dracula':
-            # Try Consolas first (Windows system font) - use smaller size due to wider characters
-            consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
-            if os.path.exists(consolas_path):
-                io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
-            else:
-                # Fallback to Roboto if Consolas not found
-                font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
-                if os.path.exists(font_path):
-                    io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        # Always use Consolas font (Windows system font)
+        consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+        if os.path.exists(consolas_path):
+            io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
         else:
-            # Use Roboto for all other themes
+            # Fallback to Roboto if Consolas not found
             font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
             if os.path.exists(font_path):
-                io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                io.fonts.add_font_from_file_ttf(font_path, 13.0)
         
         self.impl = GlfwRenderer(self.window)
         
@@ -2417,21 +2410,15 @@ class ImGuiApp:
                 io = imgui.get_io()
                 io.fonts.clear()
                 
-                if self.current_theme == 'dracula':
-                    # Try Consolas for Dracula theme - use smaller size due to wider characters
-                    consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
-                    if os.path.exists(consolas_path):
-                        io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
-                    else:
-                        # Fallback to Roboto
-                        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
-                        if os.path.exists(font_path):
-                            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                # Always use Consolas font
+                consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+                if os.path.exists(consolas_path):
+                    io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
                 else:
-                    # Use Roboto for other themes
+                    # Fallback to Roboto
                     font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
                     if os.path.exists(font_path):
-                        io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                        io.fonts.add_font_from_file_ttf(font_path, 13.0)
                 
                 # Rebuild font atlas
                 self.impl.refresh_font_texture()

@@ -84,9 +84,20 @@ jobs:
           pyinstaller --onedir --windowed `
             --name=Sounds `
             --icon=icons/sounds.ico `
-            --hidden-import=PIL.ImageTk `
+            --add-data="icons;icons" `
+            --add-data="scripts;scripts" `
+            --add-data="utils;utils" `
             --collect-all imgui `
             --collect-all glfw `
+            --collect-all OpenGL `
+            --collect-all pygame `
+            --hidden-import=PIL.ImageTk `
+            --hidden-import=pygame `
+            --hidden-import=pygame.mixer `
+            --hidden-import=pydub `
+            --hidden-import=pydub.utils `
+            --hidden-import=vpk `
+            --hidden-import=vdf `
             scripts/sounds.py
           
           # Create gui_tools directory and move GUI folders there

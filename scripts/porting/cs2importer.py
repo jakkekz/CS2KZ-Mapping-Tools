@@ -107,8 +107,8 @@ class CS2ImporterApp:
         # Window dimensions
         self.base_window_height = 280  # Base height for main UI (increased to add space under GO button)
         self.helper_text_height = 50  # Height added when BSP is selected (for helper text)
-        self.progress_tracking_height = 150  # Height added when showing progress tracking
-        self.completed_height = 100  # Height added when import completes (for failed assets section if needed)
+        self.progress_tracking_height = 110  # Height added when showing progress tracking
+        self.completed_height = 80  # Height added when import completes (for failed assets section if needed)
         self.prerequisites_expanded_height = 270  # Height for prerequisites section (increased to prevent GO button cutoff)
         
         # Cursor state
@@ -437,22 +437,15 @@ class CS2ImporterApp:
         current_theme = self.theme_manager.get_theme_name()
         self._last_theme_for_font = current_theme  # Initialize tracking
         
-        # For Dracula theme, try to use Consolas (Windows system font)
-        if current_theme == 'dracula':
-            # Try Consolas first (Windows system font) - use smaller size due to wider characters
-            consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
-            if os.path.exists(consolas_path):
-                io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
-            else:
-                # Fallback to Roboto if Consolas not found
-                font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
-                if os.path.exists(font_path):
-                    io.fonts.add_font_from_file_ttf(font_path, 15.0)
+        # Always use Consolas font (Windows system font)
+        consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+        if os.path.exists(consolas_path):
+            io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
         else:
-            # Use Roboto for all other themes
+            # Fallback to Roboto if Consolas not found
             font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
             if os.path.exists(font_path):
-                io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                io.fonts.add_font_from_file_ttf(font_path, 13.0)
         
         self.impl = GlfwRenderer(self.window)
         
@@ -1388,9 +1381,8 @@ viewsettings
             imgui.text_wrapped("2. Select the .bsp (stuff will decompile)")
             imgui.pop_style_color()
             imgui.push_style_color(imgui.COLOR_TEXT, 0.8, 0.8, 0.8, 1.0)
-            imgui.bullet_text("IF your map has displacements go ahead and")
-            imgui.text("     open the .vmf in CSGO hammer and save it")
-            imgui.bullet_text("The .vmf is decompiled to \"sdk_content/maps\"")
+            imgui.text_wrapped("- IF your map has displacements go ahead and open the .vmf in CSGO hammer and save it")
+            imgui.text_wrapped("- The .vmf is decompiled to \"sdk_content/maps\"")
             imgui.pop_style_color()
             
             imgui.spacing()
@@ -1426,40 +1418,37 @@ viewsettings
         
         # Show helper text if VMF was successfully extracted
         if self.vmf_status_color == (0.0, 1.0, 0.0, 1.0):  # Green = success
-            imgui.set_window_font_scale(1)
+            imgui.set_window_font_scale(0.9)
+            
+            # First line - gray, non-clickable text
             imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Gray
-            imgui.text("If map has displacements,")
+            imgui.text("If map has displacements, open it")
             imgui.pop_style_color()
             
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Gray
-            imgui.text("open it in ")
-            imgui.pop_style_color()
-            imgui.same_line(spacing=0)
-            
-            # Clickable "CS:GO Hammer" link using text with hover detection
+            # Second line - blue clickable text
             imgui.push_style_color(imgui.COLOR_TEXT, 0.5, 0.8, 1.0, 1.0)  # Blue
-            imgui.text("CS:GO Hammer")
-            self.link_hovered = imgui.is_item_hovered()  # Track hover state for cursor
-            if self.link_hovered:
-                # Handle click
-                if imgui.is_mouse_clicked(0):
-                    # Open SDK Launcher
-                    if self.csgo_basefolder:
-                        sdk_launcher = os.path.join(self.csgo_basefolder, "bin", "sdklauncher.exe")
-                        if os.path.exists(sdk_launcher):
-                            try:
-                                os.startfile(sdk_launcher)
-                                self.log("✓ Opened CS:GO SDK Launcher")
-                            except Exception as e:
-                                self.log(f"Error opening SDK Launcher: {e}")
-                        else:
-                            self.log(f"SDK Launcher not found at: {sdk_launcher}")
-            imgui.pop_style_color()
-            imgui.same_line(spacing=0)
+            imgui.push_style_color(imgui.COLOR_HEADER, 0.0, 0.0, 0.0, 0.0)  # Transparent background
+            imgui.push_style_color(imgui.COLOR_HEADER_HOVERED, 0.2, 0.4, 0.6, 0.3)  # Slight highlight on hover
             
-            imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Gray
-            imgui.text(" and save it")
-            imgui.pop_style_color()
+            clicked = imgui.selectable("in CS:GO Hammer and save it", False)[0]
+            hovered = imgui.is_item_hovered()
+            
+            if clicked:
+                # Open SDK Launcher
+                if self.csgo_basefolder:
+                    sdk_launcher = os.path.join(self.csgo_basefolder, "bin", "sdklauncher.exe")
+                    if os.path.exists(sdk_launcher):
+                        try:
+                            os.startfile(sdk_launcher)
+                            self.log("✓ Opened CS:GO SDK Launcher")
+                        except Exception as e:
+                            self.log(f"Error opening SDK Launcher: {e}")
+                    else:
+                        self.log(f"SDK Launcher not found at: {sdk_launcher}")
+            
+            self.link_hovered = hovered  # Track hover state for cursor
+            imgui.pop_style_color(3)
+            
             imgui.set_window_font_scale(1.0)
         
         imgui.spacing()
@@ -1588,16 +1577,26 @@ viewsettings
             
             # Open Folder button (below Open Log)
             imgui.push_style_color(imgui.COLOR_BUTTON, 0.8, 0.7, 0.2, 1.0)  # Yellow
-            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.9, 0.8, 0.3, 1.0)  # Lighter yellow
-            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.7, 0.6, 0.15, 1.0)  # Darker yellow
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.8, 0.6, 1.0)  # Lighter teal
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.6, 0.4, 1.0)  # Darker teal
             
-            if imgui.button("Open Folder", width=85, height=30):
-                self.open_addon_folder()
+            if imgui.button("Open Hammer", width=95, height=30):
+                # Launch mapping.py with the addon name
+                if self.addon:
+                    try:
+                        mapping_script = resource_path(os.path.join('scripts', 'mapping.py'))
+                        # Launch mapping.py in a new process with addon parameter
+                        subprocess.Popen([sys.executable, mapping_script, '--addon', self.addon])
+                        self.log(f"✓ Launching Hammer with addon: {self.addon}")
+                    except Exception as e:
+                        self.log(f"Error launching Hammer: {e}")
+                else:
+                    self.log("Error: No addon name specified")
             
             imgui.pop_style_color(3)
             
             # Display import stats to the right of buttons, aligned with Open Log
-            imgui.set_cursor_pos((105, cursor_y_start))
+            imgui.set_cursor_pos((115, cursor_y_start))
             imgui.begin_group()
             imgui.set_window_font_scale(0.85)
             imgui.push_style_color(imgui.COLOR_TEXT, 0.7, 0.7, 0.7, 1.0)  # Grey text
@@ -1699,21 +1698,15 @@ viewsettings
                 
                 current_theme = self.theme_manager.get_theme_name()
                 
-                if current_theme == 'dracula':
-                    # Try Consolas for Dracula theme - use smaller size due to wider characters
-                    consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
-                    if os.path.exists(consolas_path):
-                        io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
-                    else:
-                        # Fallback to Roboto
-                        font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
-                        if os.path.exists(font_path):
-                            io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                # Always use Consolas font
+                consolas_path = os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf')
+                if os.path.exists(consolas_path):
+                    io.fonts.add_font_from_file_ttf(consolas_path, 13.0)
                 else:
-                    # Use Roboto for other themes
+                    # Fallback to Roboto
                     font_path = resource_path(os.path.join("fonts", "Roboto-Regular.ttf"))
                     if os.path.exists(font_path):
-                        io.fonts.add_font_from_file_ttf(font_path, 15.0)
+                        io.fonts.add_font_from_file_ttf(font_path, 13.0)
                 
                 # Rebuild font atlas
                 self.impl.refresh_font_texture()
