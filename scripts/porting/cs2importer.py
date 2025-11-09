@@ -1580,18 +1580,17 @@ viewsettings
             imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.8, 0.6, 1.0)  # Lighter teal
             imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.15, 0.6, 0.4, 1.0)  # Darker teal
             
-            if imgui.button("Open Hammer", width=95, height=30):
-                # Launch mapping.py with the addon name
-                if self.addon:
-                    try:
-                        mapping_script = resource_path(os.path.join('scripts', 'mapping.py'))
-                        # Launch mapping.py in a new process with addon parameter
-                        subprocess.Popen([sys.executable, mapping_script, '--addon', self.addon])
-                        self.log(f"✓ Launching Hammer with addon: {self.addon}")
-                    except Exception as e:
-                        self.log(f"Error launching Hammer: {e}")
+            if imgui.button("Open Folder", width=95, height=30):
+                if self.addon and self.csgo_basefolder:
+                    # Addon folder is at {csgo_basefolder}/content/csgo_addons/{addon}
+                    addon_path = os.path.join(self.csgo_basefolder, 'content', 'csgo_addons', self.addon).replace("/", "\\")
+                    if os.path.exists(addon_path):
+                        os.startfile(addon_path)
+                        self.log(f"✓ Opened folder: {addon_path}")
+                    else:
+                        self.log(f"Error: Addon folder not found: {addon_path}")
                 else:
-                    self.log("Error: No addon name specified")
+                    self.log("Error: No addon name or CS:GO folder specified")
             
             imgui.pop_style_color(3)
             

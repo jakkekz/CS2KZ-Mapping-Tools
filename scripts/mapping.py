@@ -423,16 +423,9 @@ def run_setup(cs2_dir: str, update_metamod=True, update_cs2kz=True):
     save_versions(cs2_dir, versions)
     print("Setup complete.")
 
-def run_cs2(cs2_tools_path, addon_name=None):
+def run_cs2(cs2_tools_path):
     print(cs2_tools_path)
-    
-    # Build command with optional addon parameter
-    command = [os.path.join(cs2_tools_path, 'csgocfg.exe'), '-insecure', '-gpuraytracing']
-    if addon_name:
-        command.extend(['-addon', addon_name])
-        print(f"Launching with addon: {addon_name}")
-    
-    subprocess.run(command, creationflags=0x208, cwd=cs2_tools_path,
+    subprocess.run([os.path.join(cs2_tools_path, 'csgocfg.exe'), '-insecure', '-gpuraytracing'], creationflags=0x208, cwd=cs2_tools_path,
     stdout=subprocess.DEVNULL,
     stderr=subprocess.DEVNULL,
     stdin=subprocess.DEVNULL)
@@ -471,17 +464,6 @@ if __name__ == '__main__':
     update_metamod = '--no-update-metamod' not in sys.argv
     update_cs2kz = '--no-update-cs2kz' not in sys.argv
     
-    # Check for addon parameter
-    addon_name = None
-    if '--addon' in sys.argv:
-        try:
-            addon_index = sys.argv.index('--addon')
-            if addon_index + 1 < len(sys.argv):
-                addon_name = sys.argv[addon_index + 1]
-                print(f"Using addon: {addon_name}")
-        except (ValueError, IndexError):
-            pass
-    
     path = get_cs2_path()
     if path is None:
         print('Failed to get CS2 path. Closing in 3 seconds...')
@@ -502,7 +484,7 @@ if __name__ == '__main__':
     
     cs2_tools_path = os.path.join(path, 'game', 'bin', 'win64')
     print(f"Launching CS2 tools from '{cs2_tools_path}'...")
-    run_cs2(cs2_tools_path, addon_name=addon_name)
+    run_cs2(cs2_tools_path)
     
     restore_files(backup_path, gameinfo_path, core_backup_path, core_gameinfo_path)
     
