@@ -1,3 +1,5 @@
+<img width="825" height="80" alt="Image" src="https://github.com/user-attachments/assets/7a22082f-64aa-4e91-89c4-6df19d9d00e8" />
+
 # CS2KZ Mapping Tools
 
 A comprehensive suite of tools for Counter-Strike 2 KZ (Kreedz) map creation and development. Built with Python and ImGui for a clean, intuitive interface.
