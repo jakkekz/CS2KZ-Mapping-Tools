@@ -25,6 +25,12 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Download Portable Python
+        run: |
+          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip" -OutFile "python-embed.zip"
+          Expand-Archive -Path "python-embed.zip" -DestinationPath "python-embed"
+          Remove-Item "python-embed.zip"
+
       - name: Build GUI tool executables
         run: |
           # Build CS2Importer (onedir for faster startup)
@@ -35,6 +41,7 @@ jobs:
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
             --add-data="fonts;fonts" `
+            --add-data="python-embed;python-embed" `
             --collect-all imgui `
             --collect-all glfw `
             --collect-all OpenGL `
