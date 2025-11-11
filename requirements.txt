@@ -32,5 +32,8 @@ vpk>=1.4.0
 pygame>=2.5.0
 pydub>=0.25.1
 
+# .NET interop for VSND decompilation (internal CS2 sounds)
+pythonnet>=3.0.0
 
-#"pip install imgui[glfw] PyOpenGL glfw Pillow numpy psutil requests vdf pywin32 vtf2img vpk pygame pydub" 
+
+#"pip install imgui[glfw] PyOpenGL glfw Pillow numpy psutil requests vdf pywin32 vtf2img vpk pygame pydub pythonnet" 

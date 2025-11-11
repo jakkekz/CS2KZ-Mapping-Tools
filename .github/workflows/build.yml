@@ -119,7 +119,9 @@ jobs:
             --collect-all glfw `
             --collect-all OpenGL `
             --collect-all pygame `
+            --collect-all pythonnet `
             --collect-binaries glfw `
+            --collect-binaries pythonnet `
             --hidden-import=PIL.ImageTk `
             --hidden-import=pygame `
             --hidden-import=pygame.mixer `
@@ -128,6 +130,8 @@ jobs:
             --hidden-import=vpk `
             --hidden-import=vdf `
             --hidden-import=glfw `
+            --hidden-import=pythonnet `
+            --hidden-import=clr `
             scripts/sounds.py
           
           # Create gui_tools directory and move GUI folders there
