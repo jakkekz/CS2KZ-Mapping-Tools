@@ -1124,19 +1124,22 @@ viewsettings
             # Pass sdk_content as the content directory (where VMF and BSP are located)
             sdk_content_dir = os.path.join(self.csgo_basefolder, 'sdk_content').replace("/", "\\")
             
-            # Try to find bundled Python first, fall back to system Python
+            # Try to find bundled Python first (has required packages), fall back to system Python
             bundled_python = resource_path(os.path.join('python-embed', 'python.exe'))
             if os.path.exists(bundled_python):
                 python_exe = bundled_python
                 self.log(f"Using bundled Python: {python_exe}")
             else:
-                # Try to find system Python
-                python_exe = shutil.which('python') or shutil.which('python3') or sys.executable
-                if not python_exe or not os.path.exists(python_exe):
-                    self.log("ERROR: Python not found! Please install Python 3.11+ from python.org")
+                # Fall back to system Python
+                python_exe = shutil.which('python') or shutil.which('python3')
+                if python_exe and os.path.exists(python_exe):
+                    self.log(f"Using system Python: {python_exe}")
+                else:
+                    self.log("ERROR: Python not found!")
+                    self.log("Please install Python 3.11+ from python.org")
+                    self.log("Download: https://www.python.org/downloads/")
                     self.import_in_progress = False
                     return
-                self.log(f"Using system Python: {python_exe}")
             
             command = f'"{python_exe}" -u "{jakke_script}" '
             command += '"' + os.path.join(self.csgo_basefolder, 'csgo').replace("/", "\\") + '" '
