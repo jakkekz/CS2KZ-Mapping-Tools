@@ -132,22 +132,51 @@ bRestoreEnv = False
 
 # save local env
 def SaveEnv():
+	global VALVE_NO_AUTO_P4, bRestoreEnv
 	# save VALVE_NO_AUTO_P4 environment var
 	VALVE_NO_AUTO_P4 = os.getenv("VALVE_NO_AUTO_P4", "0" )
 	# set to 1 for our script (we need this to batch p4 commands/run much faster in
 	# environs where this is 1)
 	os.environ['VALVE_NO_AUTO_P4'] = '1'
 	# Path to bin/win64 from game/csgo/import_scripts
-	newPath = os.path.abspath("../../../game/bin/win64/")
+	# import_scripts is at: game/csgo/import_scripts
+	# bin/win64 is at: game/bin/win64
+	# So we need: ../../bin/win64 (up 2 levels from import_scripts, then into bin/win64)
+	newPath = os.path.abspath("../../bin/win64/")
+	print(f"[DEBUG] Current directory: {os.getcwd()}")
+	print(f"[DEBUG] Adding to PATH: {newPath}")
+	
+	# Check if source1import.exe exists
+	source1import_path = os.path.join(newPath, "source1import.exe")
+	if os.path.exists(source1import_path):
+		print(f"[DEBUG] ✓ Found source1import.exe at: {source1import_path}")
+	else:
+		print(f"[DEBUG] ✗ WARNING: source1import.exe NOT FOUND at: {source1import_path}")
+		print(f"[DEBUG] Trying to list directory contents...")
+		try:
+			if os.path.exists(newPath):
+				files = os.listdir(newPath)
+				print(f"[DEBUG] Directory exists, contains {len(files)} files")
+				if 'source1import.exe' in files:
+					print(f"[DEBUG] source1import.exe IS in the directory list!")
+			else:
+				print(f"[DEBUG] Directory does not exist: {newPath}")
+		except Exception as e:
+			print(f"[DEBUG] Error listing directory: {e}")
+	
 	if newPath not in os.environ['PATH']:
 		os.environ['PATH']+=f";{newPath}"
+		print(f"[DEBUG] PATH updated successfully")
+	else:
+		print(f"[DEBUG] Path already in PATH")
 	bRestoreEnv = True
 
 # restore local env
 def RestoreEnv():
+	global VALVE_NO_AUTO_P4, bRestoreEnv
 	if ( bRestoreEnv ):
 		os.environ['VALVE_NO_AUTO_P4'] = VALVE_NO_AUTO_P4
-		newPath = os.path.abspath("../../game/win64/")
+		newPath = os.path.abspath("../../../game/bin/win64/")
 		if newPath in os.environ['PATH']:
 			os.environ['PATH']=os.environ['PATH'].replace(f";{newPath}", "")
 
