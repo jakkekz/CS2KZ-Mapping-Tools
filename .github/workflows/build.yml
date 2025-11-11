@@ -33,8 +33,8 @@ jobs:
 
       - name: Build GUI tool executables
         run: |
-          # Build CS2Importer (onedir for faster startup)
-          pyinstaller --onedir --windowed `
+          # Build CS2Importer (onedir for faster startup, with console for debugging)
+          pyinstaller --onedir `
             --name=CS2Importer `
             --icon=icons/porting.ico `
             --add-data="icons;icons" `
@@ -48,8 +48,8 @@ jobs:
             --hidden-import=vdf `
             scripts/porting/cs2importer.py
           
-          # Build SkyboxConverter (onedir for faster startup)
-          pyinstaller --onedir --windowed `
+          # Build SkyboxConverter (onedir for faster startup, with console for debugging)
+          pyinstaller --onedir `
             --name=SkyboxConverter `
             --icon=icons/skybox.ico `
             --hidden-import=PIL.ImageTk `
@@ -58,16 +58,16 @@ jobs:
             --add-data="scripts;scripts" `
             scripts/skybox_gui.py
           
-          # Build VTF2PNG (onedir for faster startup)
-          pyinstaller --onedir --windowed `
+          # Build VTF2PNG (onedir for faster startup, with console for debugging)
+          pyinstaller --onedir `
             --name=VTF2PNG `
             --icon=icons/vtf2png.ico `
             --hidden-import=PIL.ImageTk `
             --hidden-import=vtf2img `
             scripts/vtf2png_gui.py
           
-          # Build LoadingScreenCreator (onedir for faster startup)
-          pyinstaller --onedir --windowed `
+          # Build LoadingScreenCreator (onedir for faster startup, with console for debugging)
+          pyinstaller --onedir `
             --name=LoadingScreenCreator `
             --icon=icons/loading.ico `
             --add-data="scripts;scripts" `
@@ -77,8 +77,8 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/creator_gui.py
           
-          # Build PointWorldText (onedir for faster startup)
-          pyinstaller --onedir --windowed `
+          # Build PointWorldText (onedir for faster startup, with console for debugging)
+          pyinstaller --onedir `
             --name=PointWorldText `
             --icon=icons/text.ico `
             --add-data="chars;chars" `
@@ -87,8 +87,8 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/pointworldtext.py
           
-          # Build Sounds (onedir for faster startup)
-          pyinstaller --onedir --windowed `
+          # Build Sounds (onedir for faster startup, with console for debugging)
+          pyinstaller --onedir `
             --name=Sounds `
             --icon=icons/sounds.ico `
             --add-data="icons;icons" `

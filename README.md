@@ -29,7 +29,12 @@ Polished, beautifully crafted ✨ through relentless, high-volume iteration and 
   View and inspect Source 2 assets with automatic updates to the latest dev build
 
 - **🔄 CS2 Map Importer**  
-  Port CS:GO maps to CS2 format  
+  Port CS:GO maps to CS2 format with automated BSP extraction and asset conversion
+  - Automatic BSPSource integration for VMF extraction
+  - Material and model porting with progress tracking
+  - Real-time import progress with detailed logs
+  - "Open Log" and "Open Folder" buttons after successful import
+  - No Python installation required (bundled portable Python)
   *Inspired by sarim-hk and andreaskeller96*
 
 - **🌅 Skybox Converter**  
@@ -44,6 +49,13 @@ Polished, beautifully crafted ✨ through relentless, high-volume iteration and 
 - **🎨 VTF to PNG Converter**  
   Convert CS:GO VTF texture files to PNG images
 
+- **🎵 Sound Manager**  
+  Add custom sounds to CS2 maps with loop point support
+  - MP3 to WAV conversion with ffmpeg (auto-downloads when needed)
+  - Loop point extraction and management
+  - Sound preview and playback
+  - Automatic sound file packaging
+
 ## 🚀 Getting Started
 
 ### Installation (Standalone Executable)
@@ -53,18 +65,21 @@ Polished, beautifully crafted ✨ through relentless, high-volume iteration and 
 
 ### Updating
 
-1. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
-2. Run `CS2KZMappingTools.exe`
-3. Open `Settings` -> `Clear Temp Folder`
-4. Ready to go again
+**Important: Close Counter-Strike 2 before updating!**
+
+1. Make sure CS2 is completely closed
+2. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
+3. Run `CS2KZMappingTools.exe`
+4. Open `Settings` -> `Clear Temp Folder`
+5. Ready to go again
+
+OR press the green download button in the top right of the window.
 
 ## ⚙️ Configuration
 
 The application automatically:
 - Downloads and installs the latest Metamod versions
 - Updates CS2KZ plugin to the latest release
-- Configures CS2 for optimal mapping workflow
-- Caches downloaded components in `%TEMP%\.CS2KZ-mapping-tools`
 
 ### Settings
 

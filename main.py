@@ -2366,7 +2366,7 @@ class ImGuiApp:
         
         # Track time for update checking
         last_update_check = 0
-        update_check_interval = 150.0  # Check every X minutes
+        update_check_interval = 10.0 * 60  # Check every 10 minutes (converted to seconds)
         
         # Do initial update check on startup
         threading.Thread(target=self.check_for_updates, daemon=True).start()
