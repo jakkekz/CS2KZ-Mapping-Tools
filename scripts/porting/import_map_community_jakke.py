@@ -26,6 +26,16 @@ if cwd not in sys.path:
 from utils import utlc as utl
 
 ##########################################################################################################################################
+# Get full path to source1import.exe
+##########################################################################################################################################
+def GetSource1ImportPath():
+	"""Get the full path to source1import.exe from the import_scripts directory."""
+	# We're running from game/csgo/import_scripts
+	# source1import.exe is at game/bin/win64/source1import.exe
+	source1import_path = os.path.abspath("../../bin/win64/source1import.exe")
+	return source1import_path
+
+##########################################################################################################################################
 # Case-insensitive file finder
 ##########################################################################################################################################
 def FindFileInsensitive(path):
@@ -293,7 +303,8 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 	fw.close()
 
 	# Don't use -src1contentdir here - let source1import find assets in VPK files
-	importRefsCmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"%s\" -s2addon %s -game csgo -usefilelist \"%s\"" % ( s1gamecsgo, s2addon, temp_refs )
+	source1import_exe = GetSource1ImportPath()
+	importRefsCmd = "\"%s\" -retail -nop4 -nop4sync -src1gameinfodir \"%s\" -s2addon %s -game csgo -usefilelist \"%s\"" % ( source1import_exe, s1gamecsgo, s2addon, temp_refs )
 	try:
 		utl.RunCommand( importRefsCmd, errorCallback )
 	except Exception as e:
@@ -370,7 +381,8 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 def ImportAndCompileMapRefs( refsFile, s2addon, errorCallback ):
 
 	# import map refs - don't use -src1contentdir so source1import can find assets in VPK files
-	importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + refsFile + "\""
+	source1import_exe = GetSource1ImportPath()
+	importcmd = "\"" + source1import_exe + "\" -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + refsFile + "\""
 	try:
 		utl.RunCommand( importcmd, errorCallback )
 	except Exception as e:
@@ -491,7 +503,8 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 			print(f"Created model material refs file: {temp_refs}")
 			
 			# Import model materials from pak01
-			importRefsCmd = f"source1import -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo -usefilelist \"{temp_refs}\""
+			source1import_exe = GetSource1ImportPath()
+			importRefsCmd = f"\"{source1import_exe}\" -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo -usefilelist \"{temp_refs}\""
 			try:
 				utl.RunCommand(importRefsCmd, non_aborting_callback)
 			except Exception as e:
@@ -575,7 +588,8 @@ def ImportVMFMaterials(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, err
 			if not material:
 				continue
 			try:
-				import_cmd = f"source1import -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -src1contentdir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo \"materials/{material}.vmt\""
+				source1import_exe = GetSource1ImportPath()
+				import_cmd = f"\"{source1import_exe}\" -retail -nop4 -nop4sync -src1gameinfodir \"{s1gamecsgo}\" -src1contentdir \"{s1gamecsgo}\" -s2addon {s2addon} -game csgo \"materials/{material}.vmt\""
 				utl.RunCommand(import_cmd, material_error_callback)
 				imported_materials.append(material)
 				# Print progress after each material
@@ -664,6 +678,8 @@ start = time.time()
 
 # save VALVE_NO_AUTO_P4 environment var, set to 1 to ensure p4 lib works in a mode that is disconnected from p4
 utl.SaveEnv()
+print("[DEBUG] SaveEnv() called, PATH should be updated")
+sys.stdout.flush()
 
 # inputs
 parser = argparse.ArgumentParser( prog='import_map_community', description='Import a map (vmf) and its dependencies from s1 to s2' )
@@ -800,7 +816,13 @@ try:
 	# IMPORTANT: Import VMF with -usebsp FIRST to allow VBSP to cull void-facing faces
 	# This must happen before importing materials/models to get proper face culling
 	# Use temp directory to avoid path issues with "Counter-Strike Global Offensive"
-	mapImportCmd = "source1import -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + temp_import_dir + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
+	# Use full path to source1import.exe instead of relying on PATH
+	source1import_exe = GetSource1ImportPath()
+	print(f"[DEBUG] Using source1import at: {source1import_exe}")
+	print(f"[DEBUG] source1import exists: {os.path.exists(source1import_exe)}")
+	sys.stdout.flush()
+	
+	mapImportCmd = "\"" + source1import_exe + "\" -retail -nop4 -nop4sync " + "%s" %("-usebsp" if usebsp == True else "") + "%s" %(" -usebsp_nomergeinstances" if nomergeinstances == True else "") + " -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + temp_import_dir + "\" -s2addon \"" + s2addon + "\" -game csgo maps\\" + mapname + ".vmf"
 	
 	print(f"Import command: {mapImportCmd}")
 	
@@ -866,7 +888,8 @@ try:
 		if os.path.exists(embedded_refs_file):
 			print(f"Found embedded materials from BSP extraction, importing...")
 			# Import embedded materials - need to specify content dir as csgo root since materials are there
-			importcmd = "source1import -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + embedded_refs_file + "\""
+			source1import_exe = GetSource1ImportPath()
+			importcmd = "\"" + source1import_exe + "\" -retail -nop4 -nop4sync -src1gameinfodir \"" + s1gamecsgo + "\" -src1contentdir \"" + s1gamecsgo + "\" -s2addon " + s2addon + " -game csgo -usefilelist \"" + embedded_refs_file + "\""
 			utl.RunCommand( importcmd, errorCallback )
 			
 			# Now compile the imported materials
