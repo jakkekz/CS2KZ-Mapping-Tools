@@ -137,7 +137,8 @@ def SaveEnv():
 	# set to 1 for our script (we need this to batch p4 commands/run much faster in
 	# environs where this is 1)
 	os.environ['VALVE_NO_AUTO_P4'] = '1'
-	newPath = os.path.abspath("../../bin/win64/")
+	# Path to bin/win64 from game/csgo/import_scripts
+	newPath = os.path.abspath("../../../game/bin/win64/")
 	if newPath not in os.environ['PATH']:
 		os.environ['PATH']+=f";{newPath}"
 	bRestoreEnv = True

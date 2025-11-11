@@ -98,7 +98,17 @@ class VSNDDecompiler:
             return True
             
         except Exception as e:
-            print(f"✗ Failed to initialize .NET: {e}")
+            error_str = str(e)
+            
+            # Check for common .NET Runtime missing errors
+            if "MemoryMarshal" in error_str or "TypeLoadException" in error_str or "Could not load type" in error_str:
+                print("✗ .NET 8 Runtime is required for internal CS2 sound decompilation")
+                print("  Download: https://dotnet.microsoft.com/download/dotnet/8.0/runtime")
+                print("  Install: .NET Desktop Runtime 8.0 (x64)")
+                print("  Note: Custom sound files work without .NET Runtime")
+            else:
+                print(f"✗ Failed to initialize .NET: {e}")
+                
             import traceback
             traceback.print_exc()
             return False

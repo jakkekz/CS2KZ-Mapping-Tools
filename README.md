@@ -51,6 +51,8 @@ Polished, beautifully crafted ✨ through relentless, high-volume iteration and 
 
 - **🎵 Sound Manager**  
   Add custom sounds to CS2 maps with loop point support
+  - Custom sound files (WAV/MP3) - works out of the box
+  - Internal CS2 sounds from VPK - requires [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime)
   - MP3 to WAV conversion with ffmpeg (auto-downloads when needed)
   - Loop point extraction and management
   - Sound preview and playback

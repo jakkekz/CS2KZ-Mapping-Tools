@@ -97,7 +97,8 @@ class SoundsManagerApp:
             self.vsnd_decompiler = VSNDDecompiler()
         except Exception as e:
             print(f"Note: VSND decompiler not available: {e}")
-            print("  Internal sound preview requires .NET Desktop Runtime 9.0")
+            print("  Internal sound preview requires .NET Desktop Runtime 8.0")
+            print("  Download: https://dotnet.microsoft.com/download/dotnet/8.0/runtime")
         
         # Addon autocomplete
         self.available_addons = []
@@ -2070,8 +2071,29 @@ class SoundsManagerApp:
             imgui.text("Sounds are decompiled, copied to addon/sounds/ folder")
             imgui.text("Compiled to .vsnd_c and visible in Hammer asset browser")
             imgui.text("Behaves identically to custom sounds after import")
+            if not self.vsnd_decompiler:
+                imgui.spacing()
+                imgui.text_colored("Note: Requires .NET 8 Desktop Runtime", 1.0, 0.8, 0.0, 1.0)
             imgui.end_tooltip()
             imgui.pop_style_var(1)
+        
+        # Show .NET Runtime warning if vsnd_decompiler is not available
+        if self.use_internal_sound and not self.vsnd_decompiler:
+            imgui.spacing()
+            imgui.push_text_wrap_pos(self.left_panel_width - 14)
+            imgui.text_colored("⚠ .NET 8 Runtime Required", 1.0, 0.6, 0.0, 1.0)
+            imgui.text_colored("Internal sounds require .NET Desktop Runtime 8.0", 0.9, 0.9, 0.0, 1.0)
+            imgui.pop_text_wrap_pos()
+            
+            if imgui.button("Download .NET 8 Runtime", width=-1, height=25):
+                import webbrowser
+                webbrowser.open("https://dotnet.microsoft.com/download/dotnet/8.0/runtime")
+            if imgui.is_item_hovered():
+                imgui.begin_tooltip()
+                imgui.text("Opens Microsoft's official .NET download page")
+                imgui.text("Install: .NET Desktop Runtime 8.0 (x64)")
+                imgui.text("After installation, restart Sound Manager")
+                imgui.end_tooltip()
         
         imgui.spacing()
         imgui.separator()
