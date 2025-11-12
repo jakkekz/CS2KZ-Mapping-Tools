@@ -54,7 +54,7 @@ jobs:
 
       - name: Build GUI tool executables
         run: |
-          # Build CS2Importer (onedir for faster startup, with console for debugging)
+          # Build CS2Importer (onedir with console for debugging)
           pyinstaller --onedir `
             --name=CS2Importer `
             --icon=icons/porting.ico `
@@ -69,7 +69,7 @@ jobs:
             --hidden-import=vdf `
             scripts/porting/cs2importer.py
           
-          # Build SkyboxConverter (onedir for faster startup, with console for debugging)
+          # Build SkyboxConverter (onedir with console for debugging)
           pyinstaller --onedir `
             --name=SkyboxConverter `
             --icon=icons/skybox.ico `
@@ -82,7 +82,7 @@ jobs:
             --add-data="scripts;scripts" `
             scripts/skybox_gui.py
           
-          # Build VTF2PNG (onedir for faster startup, with console for debugging)
+          # Build VTF2PNG (onedir with console for debugging)
           pyinstaller --onedir `
             --name=VTF2PNG `
             --icon=icons/vtf2png.ico `
@@ -90,7 +90,7 @@ jobs:
             --hidden-import=vtf2img `
             scripts/vtf2png_gui.py
           
-          # Build LoadingScreenCreator (onedir for faster startup, with console for debugging)
+          # Build LoadingScreenCreator (onedir with console for debugging)
           pyinstaller --onedir `
             --name=LoadingScreenCreator `
             --icon=icons/loading.ico `
@@ -101,7 +101,7 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/creator_gui.py
           
-          # Build PointWorldText (onedir for faster startup, with console for debugging)
+          # Build PointWorldText (onedir with console for debugging)
           pyinstaller --onedir `
             --name=PointWorldText `
             --icon=icons/text.ico `
@@ -111,7 +111,7 @@ jobs:
             --hidden-import=PIL.ImageFont `
             scripts/pointworldtext.py
           
-          # Build Sounds (onedir for faster startup, with console for debugging)
+          # Build Sounds (onedir with console for debugging)
           pyinstaller --onedir `
             --name=Sounds `
             --icon=icons/sounds.ico `
@@ -161,15 +161,6 @@ jobs:
             --collect-all glfw `
             --collect-all OpenGL `
             --collect-all PIL `
-            --collect-binaries glfw `
-            --collect-binaries OpenGL `
-            --hidden-import=imgui `
-            --hidden-import=imgui.core `
-            --hidden-import=imgui.integrations `
-            --hidden-import=imgui.integrations.glfw `
-            --hidden-import=glfw `
-            --hidden-import=OpenGL `
-            --hidden-import=OpenGL.GL `
             --hidden-import=PIL._tkinter_finder `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=PIL.ImageFont `
