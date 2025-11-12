@@ -463,15 +463,27 @@ class SoundsManagerApp:
                     self.play_sound_file(decompiled_path)
                 else:
                     self.log("✗ Failed to decompile sound")
+                    self.log("ℹ Internal sound preview requires .NET Desktop Runtime 8.0")
+                    self.log("  Download: https://dotnet.microsoft.com/download/dotnet/8.0")
+                    self.log("  Click 'Download x64' under '.NET Desktop Runtime 8.0'")
+                    self.log("  The sound will still work in-game when you click 'Add Sound'")
                     
             except Exception as e:
-                self.log(f"✗ Error previewing sound: {e}")
-                import traceback
-                traceback.print_exc()
+                error_str = str(e)
+                if "MemoryMarshal" in error_str or "TypeLoadException" in error_str:
+                    self.log("✗ .NET 8 Desktop Runtime is required for internal sound preview")
+                    self.log("  Download: https://dotnet.microsoft.com/download/dotnet/8.0")
+                    self.log("  Click 'Download x64' under '.NET Desktop Runtime 8.0'")
+                    self.log("  The sound will still work in-game when you click 'Add Sound'")
+                else:
+                    self.log(f"✗ Error previewing sound: {e}")
+                    import traceback
+                    traceback.print_exc()
         else:
             # Fallback message if decompiler not available
-            self.log("ℹ Internal sound preview requires .NET Desktop Runtime 9.0")
-            self.log("  The sound will work in-game when you click 'Add Sound'")
+            self.log("ℹ Internal sound preview requires .NET Desktop Runtime 8.0")
+            self.log("  Download: https://dotnet.microsoft.com/download/dotnet/8.0")
+            self.log("  The sound will still work in-game when you click 'Add Sound'")
             self.log(f"  Selected: {self.selected_internal_sound}")
     
     

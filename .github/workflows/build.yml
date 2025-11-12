@@ -40,14 +40,18 @@ jobs:
           if (Test-Path $pthFile) {
             $content = Get-Content $pthFile
             $content = $content -replace '#import site', 'import site'
+            # Add Lib/site-packages to path
+            if ($content -notmatch 'Lib\\site-packages') {
+              $content += "`nLib\site-packages`n"
+            }
             $content | Set-Content $pthFile
           }
           
           # Install pip
           & "python-embed\python.exe" "python-embed\get-pip.py" --no-warn-script-location
           
-          # Install required packages for import script
-          & "python-embed\python.exe" -m pip install --no-warn-script-location vdf colorama
+          # Install required packages for CS2 importer tool
+          & "python-embed\python.exe" -m pip install --no-warn-script-location vdf colorama vmfpy vpk Pillow keyvalues3
           
           # Clean up
           Remove-Item "python-embed\get-pip.py" -ErrorAction SilentlyContinue
@@ -154,6 +158,7 @@ jobs:
             --add-data="chars;chars" `
             --add-data="fonts;fonts" `
             --add-data="gui_tools;gui_tools" `
+            --add-data="python-embed;python-embed" `
             --collect-all imgui `
             --collect-all glfw `
             --collect-all OpenGL `
@@ -167,6 +172,9 @@ jobs:
             --hidden-import=requests `
             --hidden-import=vtf2img `
             --hidden-import=numpy `
+            --hidden-import=vpk `
+            --hidden-import=vmfpy `
+            --hidden-import=keyvalues3 `
             --hidden-import=scripts.creator `
             --hidden-import=scripts.SkyboxConverter `
             main.py
