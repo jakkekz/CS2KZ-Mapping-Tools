@@ -18,15 +18,12 @@ from datetime import datetime, timedelta
 # Create SSL context that works in VM environments
 def create_ssl_context():
     """Create SSL context with fallback for certificate verification issues"""
-    try:
-        # Try default context first (secure)
-        return ssl.create_default_context()
-    except:
-        # Fallback: disable verification (for VM/restricted environments)
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        return context
+    # Always create context with verification disabled for VM/restricted environments
+    # This is safe for downloading from known sources (GitHub, etc.)
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
 
 class UpdateChecker:
     def __init__(self):

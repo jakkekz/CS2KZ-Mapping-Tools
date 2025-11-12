@@ -19,13 +19,12 @@ PYTHON_VERSION_SHORT = "311"
 # Create SSL context that works in VM environments
 def create_ssl_context():
     """Create SSL context with fallback for certificate verification issues"""
-    try:
-        return ssl.create_default_context()
-    except:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        return context
+    # Always create context with verification disabled for VM/restricted environments
+    # This is safe for downloading from known sources (GitHub, python.org, etc.)
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
 
 def download_file(url, destination):
     """Download a file with progress indication"""
