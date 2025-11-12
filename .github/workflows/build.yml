@@ -76,6 +76,9 @@ jobs:
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=numpy `
+            --hidden-import=openexr_numpy `
+            --collect-all openexr_numpy `
+            --collect-all numpy `
             --add-data="scripts;scripts" `
             scripts/skybox_gui.py
           
