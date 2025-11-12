@@ -161,6 +161,14 @@ jobs:
             --collect-all glfw `
             --collect-all OpenGL `
             --collect-all PIL `
+            --collect-binaries imgui `
+            --collect-binaries glfw `
+            --collect-binaries OpenGL `
+            --hidden-import=imgui `
+            --hidden-import=imgui.core `
+            --hidden-import=imgui.integrations.glfw `
+            --hidden-import=glfw `
+            --hidden-import=OpenGL.GL `
             --hidden-import=PIL._tkinter_finder `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=PIL.ImageFont `
