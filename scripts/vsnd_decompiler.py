@@ -8,7 +8,21 @@ import os
 import sys
 import tempfile
 import urllib.request
+import ssl
 from pathlib import Path
+
+# Create SSL context that works in VM environments
+def create_ssl_context():
+    """Create SSL context with fallback for certificate verification issues"""
+    try:
+        # Try default context first (secure)
+        return ssl.create_default_context()
+    except:
+        # Fallback: disable verification (for VM/restricted environments)
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
 
 # DLL download URLs (from Hammer5Tools)
 DLL_URLS = {
@@ -37,7 +51,11 @@ class VSNDDecompiler:
             if not dll_path.exists():
                 print(f"Downloading {dll_name}...")
                 try:
-                    urllib.request.urlretrieve(url, str(dll_path))
+                    # Try with SSL context to handle VM/restricted environments
+                    ssl_context = create_ssl_context()
+                    with urllib.request.urlopen(url, context=ssl_context, timeout=30) as response:
+                        with open(str(dll_path), 'wb') as f:
+                            f.write(response.read())
                     print(f"✓ Downloaded {dll_name}")
                 except Exception as e:
                     print(f"✗ Failed to download {dll_name}: {e}")

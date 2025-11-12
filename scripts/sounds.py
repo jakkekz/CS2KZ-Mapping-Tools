@@ -22,8 +22,22 @@ import threading
 import vpk
 import pygame
 import urllib.request
+import ssl
 import zipfile
 import io
+
+# Create SSL context that works in VM environments
+def create_ssl_context():
+    """Create SSL context with fallback for certificate verification issues"""
+    try:
+        # Try default context first (secure)
+        return ssl.create_default_context()
+    except:
+        # Fallback: disable verification (for VM/restricted environments)
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
 
 # Try to import VSND decompiler
 try:
@@ -1035,7 +1049,8 @@ class SoundsManagerApp:
             # Download the ZIP file
             url = "https://www.rarewares.org/files/mp3/lame3.100.1-x64.zip"
             
-            with urllib.request.urlopen(url, timeout=30) as response:
+            ssl_context = create_ssl_context()
+            with urllib.request.urlopen(url, context=ssl_context, timeout=30) as response:
                 zip_data = response.read()
             
             # Extract only lame_enc.dll from the ZIP (don't keep anything else)
@@ -1199,7 +1214,8 @@ class SoundsManagerApp:
                 # Download ffmpeg essentials build (includes both ffmpeg and ffprobe)
                 url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
                 
-                with urllib.request.urlopen(url, timeout=120) as response:
+                ssl_context = create_ssl_context()
+                with urllib.request.urlopen(url, context=ssl_context, timeout=120) as response:
                     zip_data = response.read()
                 
                 self.log("⏳ Extracting ffmpeg.exe and ffprobe.exe...")

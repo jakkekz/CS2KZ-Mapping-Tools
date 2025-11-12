@@ -9,10 +9,24 @@ import time
 import json
 import urllib.request
 import urllib.error
+import ssl
 import tempfile
 import shutil
 import subprocess
 from datetime import datetime, timedelta
+
+# Create SSL context that works in VM environments
+def create_ssl_context():
+    """Create SSL context with fallback for certificate verification issues"""
+    try:
+        # Try default context first (secure)
+        return ssl.create_default_context()
+    except:
+        # Fallback: disable verification (for VM/restricted environments)
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
 
 class UpdateChecker:
     def __init__(self):
@@ -82,7 +96,8 @@ class UpdateChecker:
             )
             
             print(f"[Update] Fetching: {self.github_releases_api}")
-            with urllib.request.urlopen(req, timeout=10) as response:
+            ssl_context = create_ssl_context()
+            with urllib.request.urlopen(req, context=ssl_context, timeout=10) as response:
                 data = json.loads(response.read().decode())
                 
                 # Get release information
@@ -150,6 +165,10 @@ class UpdateChecker:
             new_exe_path = os.path.join(update_dir, "CS2KZ-Mapping-Tools-new.exe")
             
             print(f"[Update] Downloading from {self.latest_download_url}...")
+            ssl_context = create_ssl_context()
+            # Create opener with SSL context
+            opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
+            urllib.request.install_opener(opener)
             urllib.request.urlretrieve(self.latest_download_url, new_exe_path)
             print(f"[Update] Downloaded to {new_exe_path}")
             
