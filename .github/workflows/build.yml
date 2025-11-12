@@ -145,6 +145,12 @@ jobs:
           Move-Item -Path dist/LoadingScreenCreator -Destination gui_tools/
           Move-Item -Path dist/PointWorldText -Destination gui_tools/
           Move-Item -Path dist/Sounds -Destination gui_tools/
+          
+          # Debug: Show gui_tools size
+          Write-Host "Checking gui_tools folder size..."
+          Get-ChildItem -Path gui_tools -Recurse | Measure-Object -Property Length -Sum | Select-Object @{Name="Size(MB)";Expression={[math]::Round($_.Sum / 1MB, 2)}}
+          Write-Host "GUI tools built:"
+          Get-ChildItem -Path gui_tools -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
 
       - name: Build CS2KZMappingTools.exe (One-File)
         run: |
@@ -181,6 +187,10 @@ jobs:
             --hidden-import=scripts.creator `
             --hidden-import=scripts.SkyboxConverter `
             main.py
+          
+          # Debug: Show final exe size
+          Write-Host "`nFinal executable built:"
+          Get-Item dist/CS2KZMappingTools.exe | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length / 1MB, 2)}}
         
       - name: Upload artifact (Single EXE)
         uses: actions/upload-artifact@v4
