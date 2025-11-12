@@ -1,7 +1,7 @@
 """
 GUI Skybox Converter - Simplified version with file dialogs
 Allows user to select 6 skybox images and output location
-Supports VTF, PNG, JPG, TGA, EXR formats
+Supports VTF, PNG, JPG, TGA formats
 """
 
 import tkinter as tk
@@ -10,7 +10,6 @@ from PIL import Image
 import os
 import sys
 import tempfile
-import numpy as np
 
 # Try to import VTF support
 try:
@@ -20,27 +19,6 @@ except ImportError:
     VTF_SUPPORT = False
     print("Warning: vtf2img library not found. VTF files will not be supported.")
     print("Install with: pip install vtf2img")
-
-# Try to import EXR support
-EXR_SUPPORT = False
-PILLOW_EXR_SUPPORT = False
-try:
-    from openexr_numpy import imread
-    EXR_SUPPORT = True
-    print("EXR Support: openexr-numpy is available for .exr files.")
-except ImportError:
-    # Try fallback to Pillow's EXR support
-    try:
-        from PIL import ImageFile
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        test_formats = Image.registered_extensions()
-        if '.exr' in test_formats.values():
-            PILLOW_EXR_SUPPORT = True
-            print("EXR Support: Basic support through Pillow detected.")
-        else:
-            print("Warning: No EXR support found. Install 'openexr-numpy' for HDR support.")
-    except:
-        print("Warning: No EXR support libraries found.")
 
 # Helper function for PyInstaller resource paths
 def resource_path(relative_path):
@@ -54,23 +32,8 @@ def resource_path(relative_path):
 # Face order for the skybox
 TARGET_SLOTS = ['up', 'left', 'front', 'right', 'back', 'down']
 
-# --- CUSTOMIZABLE TRANSFORMATION CONFIGS ---
-
+# Transformation configuration for standard VTF/PNG files
 # Format: 'Target Slot': ('Source Face', Rotation Degrees (CCW), PIL Flip Constant)
-# Rotation Degrees (CCW): 90, -90 (CW), 180, 0 (None)
-# PIL Flip Constant: None, Image.FLIP_LEFT_RIGHT, Image.FLIP_TOP_BOTTOM, Image.ROTATE_180
-
-# 1. Configuration for EXR files (Customizable for HDR renders)
-EXR_TRANSFORMS = {
-    'up':      ('up', -90, None),
-    'down':    ('down', -90, None),
-    'left':    ('front', 0, None),
-    'front':   ('right', -90, None),
-    'right':   ('back', 180, None),
-    'back':    ('left', 90, None),
-}
-
-# 2. Configuration for all other formats (VTF, PNG, JPG, etc.)
 DEFAULT_TRANSFORMS = {
     'up':      ('up', 0, None),
     'down':    ('down', 0, None),
@@ -373,52 +336,6 @@ def convert_vtf_to_pil_image(vtf_path):
             )
         raise Exception(f"Error converting VTF file '{os.path.basename(vtf_path)}': {e}")
 
-def convert_exr_to_pil_image(exr_path):
-    """
-    Converts an EXR file to a PIL Image object.
-    Returns the Image or raises an exception.
-    """
-    if not EXR_SUPPORT and not PILLOW_EXR_SUPPORT:
-        raise ImportError(
-            "EXR support requires additional libraries.\n"
-            "Install with: pip install openexr-numpy\n"
-            "Or convert EXR to PNG using Photoshop/GIMP."
-        )
-    
-    try:
-        if EXR_SUPPORT:
-            # Use openexr-numpy for proper HDR support
-            image_float = imread(exr_path)
-            
-            # Handle channels (convert to RGBA)
-            if image_float.shape[2] == 4:
-                pass
-            elif image_float.shape[2] == 3:
-                # Add an alpha channel of 1s if only RGB is present
-                alpha = np.ones((image_float.shape[0], image_float.shape[1], 1), dtype=image_float.dtype)
-                image_float = np.concatenate((image_float, alpha), axis=2)
-            else:
-                raise ValueError(f"EXR file has unexpected channel count: {image_float.shape[2]}")
-            
-            # Perform simple tone-mapping/normalization for LDR (0-255)
-            clipped_image = np.clip(image_float, 0.0, 1.0)
-            
-            # Convert to 8-bit unsigned integer (0-255)
-            image_8bit = (clipped_image * 255).astype(np.uint8)
-            
-            # Convert to PIL Image
-            return Image.fromarray(image_8bit, 'RGBA')
-            
-        elif PILLOW_EXR_SUPPORT:
-            # Fallback to Pillow's basic EXR support
-            with Image.open(exr_path) as img:
-                return img.convert('RGBA')
-        else:
-            raise ImportError("No EXR conversion method available.")
-            
-    except Exception as e:
-        raise Exception(f"Error converting EXR file '{os.path.basename(exr_path)}': {e}")
-
 def stitch_skybox(files, output_path):
     """Stitch the 6 faces into a single skybox image with proper transformations"""
     temp_files = []  # Track temporary files for cleanup
@@ -427,13 +344,10 @@ def stitch_skybox(files, output_path):
         # Load all images (convert VTF if needed)
         images = {}
         base_size = None
-        is_exr_format = False  # Track if we're processing EXR files
         
         for face, path in files.items():
-            path_lower = path.lower()
-            
-            # Check file type and convert if needed
-            if path_lower.endswith('.vtf'):
+            # Check if it's a VTF file
+            if path.lower().endswith('.vtf'):
                 if not VTF_SUPPORT:
                     raise ImportError(
                         "VTF files detected but vtf2img library is not installed.\n"
@@ -441,20 +355,7 @@ def stitch_skybox(files, output_path):
                     )
                 print(f"Converting VTF file: {os.path.basename(path)}")
                 img = convert_vtf_to_pil_image(path)
-                
-            elif path_lower.endswith('.exr'):
-                if not EXR_SUPPORT and not PILLOW_EXR_SUPPORT:
-                    raise ImportError(
-                        "EXR files detected but no EXR support library is installed.\n"
-                        "Install with: pip install openexr-numpy\n"
-                        "Or convert EXR to PNG using Photoshop/GIMP."
-                    )
-                print(f"Converting EXR file: {os.path.basename(path)}")
-                img = convert_exr_to_pil_image(path)
-                is_exr_format = True  # Set flag for EXR transformations
-                
             else:
-                # Standard image formats (PNG, JPG, TGA, etc.)
                 img = Image.open(path).convert("RGBA")
             
             images[face] = img
@@ -480,15 +381,10 @@ def stitch_skybox(files, output_path):
         
         print("\nStitching images with proper transformations...")
         
-        # Select the correct transformation map based on file format
-        transform_map = EXR_TRANSFORMS if is_exr_format else DEFAULT_TRANSFORMS
-        config_name = "EXR_TRANSFORMS" if is_exr_format else "DEFAULT_TRANSFORMS"
-        print(f"Using transformation config: {config_name}")
-        
         # Loop over target slots and apply transformations
         for target_slot in TARGET_SLOTS:
-            # Get transformation from the selected map
-            source_face, rotation_degrees, flip = transform_map.get(target_slot, (target_slot, 0, None))
+            # Get transformation from DEFAULT_TRANSFORMS
+            source_face, rotation_degrees, flip = DEFAULT_TRANSFORMS.get(target_slot, (target_slot, 0, None))
             
             # Get the source image
             image_to_paste = images[source_face]

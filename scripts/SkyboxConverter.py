@@ -35,31 +35,12 @@ except NameError:
 
 # --- EXR Support Library (Using openexr-numpy) ---
 EXR_SUPPORT_ENABLED = False
-PILLOW_EXR_ENABLED = False
-
-# Try primary EXR library (openexr-numpy)
 try:
     from openexr_numpy import imread
     EXR_SUPPORT_ENABLED = True
     print("EXR Support: openexr-numpy is installed and ready for .exr files.")
 except ImportError:
-    print("Warning: 'openexr-numpy' library not installed.")
-
-# Try fallback EXR support through Pillow (limited support)
-if not EXR_SUPPORT_ENABLED:
-    try:
-        from PIL import ImageFile
-        ImageFile.LOAD_TRUNCATED_IMAGES = True
-        
-        # Test if Pillow can handle EXR (some builds include it)
-        test_formats = Image.registered_extensions()
-        if '.exr' in test_formats.values():
-            PILLOW_EXR_ENABLED = True
-            print("EXR Support: Basic support through Pillow detected.")
-        else:
-            print("Warning: No EXR support available. Install 'openexr-numpy' for full HDR support.")
-    except ImportError:
-        print("Warning: No EXR support libraries found.")
+    print("Warning: The 'openexr-numpy' or 'numpy' library is not installed. .exr file support is unavailable.")
 
 # --- CONFIGURATION (Initial/Default Values) ---
 OUTPUT_DIR = "skybox" 
@@ -109,14 +90,14 @@ EXR_TRANSFORMS = {
 # 2. Configuration for all other formats (VTF, PNG, JPG, etc.) - Standard 1:1 Cubemap
 # --- CORRECTED STANDARD ROTATIONS FOR NON-EXR FILES (VTF/PNG) ---
 DEFAULT_TRANSFORMS = {
-    # Standard cubemap projection (VTF/Source) requires a 180-degree rotation on UP/DOWN for 4x3 format.
-    # The image file names must match the target slot name.
+    # Standard 1:1 cubemap - no remapping needed for px/nx/py/ny/pz/nz naming
+    # Each face goes directly to its corresponding slot
     'up':      ('up', 0, None),
     'down':    ('down', 0, None),
-    'left':    ('back', 0, None), 
-    'front':   ('right', 0, None),
-    'right':   ('front', 0, None), 
-    'back':    ('left', 0, None),
+    'left':    ('left', 0, None), 
+    'front':   ('front', 0, None),
+    'right':   ('right', 0, None), 
+    'back':    ('back', 0, None),
 }
 # --- END CORRECTED ROTATIONS ---
 
@@ -223,44 +204,32 @@ Layer0
 
 def convert_exr_to_png(input_file, output_file):
     """
-    Converts a single EXR file to a temporary LDR PNG file.
-    Uses openexr-numpy if available, falls back to Pillow if supported.
+    Converts a single EXR file to a temporary LDR PNG file using openexr-numpy and PIL.
     """
     try:
-        if EXR_SUPPORT_ENABLED:
-            # Primary method: Read the EXR file using openexr-numpy
-            image_float = imread(input_file)
+        # Read the EXR file using openexr-numpy
+        image_float = imread(input_file)
 
-            # Handle channels (convert to RGBA)
-            if image_float.shape[2] == 4:
-                pass
-            elif image_float.shape[2] == 3:
-                # Add an alpha channel of 1s if only RGB is present
-                alpha = np.ones((image_float.shape[0], image_float.shape[1], 1), dtype=image_float.dtype)
-                image_float = np.concatenate((image_float, alpha), axis=2)
-            else:
-                raise ValueError(f"EXR file has unexpected channel count: {image_float.shape[2]}")
-
-            # Perform simple tone-mapping/normalization for LDR PNG (0-255).
-            clipped_image = np.clip(image_float, 0.0, 1.0) # Clips to 0-1 range
-
-            # Convert to 8-bit unsigned integer (0-255)
-            image_8bit = (clipped_image * 255).astype(np.uint8)
-
-            # Use Pillow to save the 8-bit NumPy array as a PNG
-            pil_image = Image.fromarray(image_8bit, 'RGBA')
-            pil_image.save(output_file, format='PNG')
-            
-        elif PILLOW_EXR_ENABLED:
-            # Fallback method: Try using Pillow directly (limited EXR support)
-            print("Using Pillow fallback for EXR conversion...")
-            with Image.open(input_file) as img:
-                # Convert to RGBA and save as PNG
-                rgba_img = img.convert('RGBA')
-                rgba_img.save(output_file, format='PNG')
+        # Handle channels (convert to RGBA)
+        if image_float.shape[2] == 4:
+            pass
+        elif image_float.shape[2] == 3:
+            # Add an alpha channel of 1s if only RGB is present
+            alpha = np.ones((image_float.shape[0], image_float.shape[1], 1), dtype=image_float.dtype)
+            image_float = np.concatenate((image_float, alpha), axis=2)
         else:
-            print("No EXR conversion method available.")
-            return False
+            raise ValueError(f"EXR file has unexpected channel count: {image_float.shape[2]}")
+
+
+        # Perform simple tone-mapping/normalization for LDR PNG (0-255).
+        clipped_image = np.clip(image_float, 0.0, 1.0) # Clips to 0-1 range
+
+        # Convert to 8-bit unsigned integer (0-255)
+        image_8bit = (clipped_image * 255).astype(np.uint8)
+
+        # Use Pillow to save the 8-bit NumPy array as a PNG
+        pil_image = Image.fromarray(image_8bit, 'RGBA')
+        pil_image.save(output_file, format='PNG')
         
         return True
     
@@ -643,18 +612,9 @@ def stitch_cubemap_rotated(filenames_map, output_file_path, temp_dir):
         
         elif path_lower.endswith('.exr'):
             source_format_type = 'exr'
-            if not EXR_SUPPORT_ENABLED and not PILLOW_EXR_ENABLED:
-                print(f"\nERROR: Cannot process EXR file '{os.path.basename(path)}'.")
-                print("EXR support requires additional libraries.")
-                print("Solutions:")
-                print("1. Install full HDR support: pip install openexr-numpy")
-                print("2. Convert EXR files to PNG/JPG using other tools (Photoshop, GIMP, etc.)")
-                print("3. Download the latest CS2KZ Mapping Tools release with EXR support")
-                
-                # Clean up any temp files created so far
-                for f in temp_files:
-                    try: os.remove(f)
-                    except: pass
+            if not EXR_SUPPORT_ENABLED:
+                print(f"\nFATAL ERROR: Cannot convert EXR file '{os.path.basename(path)}'.")
+                print("The 'openexr-numpy' library is missing.")
                 return False
             
             base_name = os.path.splitext(os.path.basename(path))[0]
