@@ -71,9 +71,9 @@ def FindFileInsensitive(path):
 def GetCS2ToolPath(tool_name, s2gamecsgo):
 	"""Construct full path to a CS2 SDK tool (e.g., cs_mdl_import.exe).
 	s2gamecsgo should point to game\csgo folder."""
-	# CS2 tools are in bin\win64 relative to the game root
-	# game\csgo -> bin\win64
-	tool_path = os.path.join(s2gamecsgo, "..", "..", "bin", "win64", tool_name)
+	# CS2 tools are in game\bin\win64 relative to the game\csgo folder
+	# game\csgo -> ..\bin\win64
+	tool_path = os.path.join(s2gamecsgo, "..", "bin", "win64", tool_name)
 	tool_path = os.path.normpath(tool_path)
 	if os.path.exists(tool_path):
 		return tool_path
