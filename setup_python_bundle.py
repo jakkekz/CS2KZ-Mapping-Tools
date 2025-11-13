@@ -132,12 +132,12 @@ def setup_python_embed():
     # Install required packages for the importer
     print("\nInstalling required packages for CS2 Importer...")
     packages = [
-        'vmfpy',           # For VMF parsing
-        'vpk',             # For VPK file handling
-        'Pillow',          # For image processing
-        'vdf',             # For VDF parsing
-        'keyvalues3',      # For KV3 format
+        'vdf',             # For VDF parsing (if needed)
+        'colorama',        # For colored console output
     ]
+    
+    # Note: import_map_community_jakke.py only uses standard library modules
+    # but we install vdf and colorama just in case they're needed by utilities
     
     for package in packages:
         print(f"  Installing {package}...")

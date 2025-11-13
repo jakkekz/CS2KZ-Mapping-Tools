@@ -51,7 +51,9 @@ jobs:
           & "python-embed\python.exe" "python-embed\get-pip.py" --no-warn-script-location
           
           # Install required packages for CS2 importer tool
-          & "python-embed\python.exe" -m pip install --no-warn-script-location vdf colorama vmfpy vpk Pillow keyvalues3
+          # Note: import_map_community_jakke.py only uses standard library modules
+          # We install vdf and colorama just in case they're needed by other scripts
+          & "python-embed\python.exe" -m pip install --no-warn-script-location vdf colorama
           
           # Clean up
           Remove-Item "python-embed\get-pip.py" -ErrorAction SilentlyContinue
@@ -173,8 +175,6 @@ jobs:
             --hidden-import=vtf2img `
             --hidden-import=numpy `
             --hidden-import=vpk `
-            --hidden-import=vmfpy `
-            --hidden-import=keyvalues3 `
             --hidden-import=scripts.creator `
             --hidden-import=scripts.SkyboxConverter `
             main.py
