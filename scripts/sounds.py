@@ -1,6 +1,6 @@
 """
 CS2 Sounds Manager - PyImGui Interface
-Simplifies adding custom sounds to CS2 maps
+Simplifies adding custom sounds to CS2 maps.
 """
 
 import imgui
