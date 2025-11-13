@@ -66,6 +66,21 @@ def FindFileInsensitive(path):
 	return path  # Return original if not found
 
 ##########################################################################################################################################
+# Get path to CS2 SDK tool
+##########################################################################################################################################
+def GetCS2ToolPath(tool_name, s2gamecsgo):
+	"""Construct full path to a CS2 SDK tool (e.g., cs_mdl_import.exe).
+	s2gamecsgo should point to game\csgo folder."""
+	# CS2 tools are in bin\win64 relative to the game root
+	# game\csgo -> bin\win64
+	tool_path = os.path.join(s2gamecsgo, "..", "..", "bin", "win64", tool_name)
+	tool_path = os.path.normpath(tool_path)
+	if os.path.exists(tool_path):
+		return tool_path
+	# If not found, return the tool name (will fail but show clear error)
+	return tool_name
+
+##########################################################################################################################################
 # Fix material file case to match VMF expectations
 ##########################################################################################################################################
 def FixMaterialCase(vmf_path, game_dir):
@@ -280,7 +295,8 @@ def ImportAndCompileMapMDLs( filename, s2addon, errorCallback ):
 
 			# Import
 
-			importCmd = "cs_mdl_import -nop4 %s -i \"%s\" -o \"%s\" \"%s\"" % ( extraoptions, s1gamecsgo, s2contentcsgoimported, infile )
+			cs_mdl_import = GetCS2ToolPath("cs_mdl_import.exe", s2gamecsgo)
+			importCmd = "\"%s\" -nop4 %s -i \"%s\" -o \"%s\" \"%s\"" % ( cs_mdl_import, extraoptions, s1gamecsgo, s2contentcsgoimported, infile )
 			utl.RunCommand( importCmd, errorCallback )
 
 			# So we only import materials once, lets add their refs to a refsset, and import them after all models
@@ -458,7 +474,8 @@ def ImportVMFModels(vmf_path, s1gamecsgo, s2addon, s2contentcsgoimported, errorC
 				continue
 			try:
 				# Use cs_mdl_import to import the model from pak01
-				import_cmd = f"cs_mdl_import -nop4 -i \"{s1gamecsgo}\" -o \"{s2contentcsgoimported}\" \"{model}\""
+				cs_mdl_import = GetCS2ToolPath("cs_mdl_import.exe", s2gamecsgo)
+				import_cmd = f"\"{cs_mdl_import}\" -nop4 -i \"{s1gamecsgo}\" -o \"{s2contentcsgoimported}\" \"{model}\""
 				utl.RunCommand(import_cmd, non_aborting_callback)
 				imported_models.append(model)
 				# Print progress after each model
