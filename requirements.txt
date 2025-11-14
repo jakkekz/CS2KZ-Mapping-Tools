@@ -22,8 +22,8 @@ vdf>=3.4
 # Windows API (for version checking)
 pywin32>=306
 
-# VTF Support (Source engine VTF files)
-vtf2img>=0.1.0
+# VTF Support (Replaced by VTFCmd.exe - place in %APPDATA%/.cs2kz-mapping-tools/)
+# vtf2img>=0.1.0  # Removed - using VTFCmd.exe instead for better format support
 
 # VPK Support (Valve Package files)
 vpk>=1.4.0

@@ -4,26 +4,139 @@ import sys
 import glob
 import time 
 import textwrap
+import tempfile
 import numpy as np
 import tkinter as tk
 from tkinter import messagebox 
 
-# --- PyInstaller Hook for vtf2img ---
-# This block ensures native dependencies for vtf2img (like py_vtf) are loaded
-if getattr(sys, 'frozen', False):
-    try:
-        import py_vtf
-    except ImportError:
-        pass
-# -----------------------------------
+# --- VTF Tools Path Detection ---
+# VTF tools should be bundled with the application
+# Location: vtf/VTFCmd.exe and vtf/VTFLib.dll
 
-# --- VTR to Image Conversion Library ---
+def find_vtfcmd():
+    """Find VTFCmd.exe in various locations, download if not found"""
+    import shutil
+    import urllib.request
+    import zipfile
+    import io
+    
+    # Check 1: Bundled VTF tools first (preferred)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    bundled_vtfcmd = os.path.join(project_root, 'vtf', 'VTFCmd.exe')
+    
+    if os.path.exists(bundled_vtfcmd):
+        bundled_vtflib = os.path.join(project_root, 'vtf', 'VTFLib.dll')
+        if os.path.exists(bundled_vtflib):
+            print(f"[OK] Using bundled VTF tools from: {bundled_vtfcmd}")
+            return bundled_vtfcmd
+        else:
+            print(f"Warning: VTFCmd.exe found but VTFLib.dll missing at: {bundled_vtflib}")
+    
+    # Check 2: .CS2KZ-mapping-tools/vtf folder in Temp
+    temp_dir = os.environ.get('TEMP', os.environ.get('TMP', tempfile.gettempdir()))
+    if temp_dir:
+        tools_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'vtf')
+        vtfcmd_path = os.path.join(tools_dir, 'VTFCmd.exe')
+        vtflib_path = os.path.join(tools_dir, 'VTFLib.dll')
+        
+        if os.path.exists(vtfcmd_path) and os.path.exists(vtflib_path):
+            print(f"[OK] Using cached VTF tools from: {vtfcmd_path}")
+            return vtfcmd_path
+    
+    # Check 3: Same directory as script
+    vtfcmd_path = os.path.join(script_dir, 'VTFCmd.exe')
+    if os.path.exists(vtfcmd_path):
+        return vtfcmd_path
+    
+    # Check 4: In PATH
+    vtfcmd_path = shutil.which('VTFCmd.exe')
+    if vtfcmd_path:
+        return vtfcmd_path
+    
+    # Download VTF tools if not found anywhere
+    if not temp_dir:
+        print("[ERROR] Cannot determine temp directory for VTF tools download")
+        return None
+    
+    tools_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'vtf')
+    os.makedirs(tools_dir, exist_ok=True)
+    
+    vtfcmd_path = os.path.join(tools_dir, 'VTFCmd.exe')
+    vtflib_path = os.path.join(tools_dir, 'VTFLib.dll')
+    
+    print("VTF tools not found. Downloading from GitHub...")
+    print("This is a one-time download (~2 MB)...")
+    
+    try:
+        # Download VTFLib binary archive from nemstools which contains VTFCmd.exe and VTFLib.dll
+        download_url = "https://nemstools.github.io/files/vtflib132-bin.zip"
+        print(f"Downloading VTFLib binaries from {download_url}...")
+        
+        with urllib.request.urlopen(download_url, timeout=30) as response:
+            download_data = response.read()
+        
+        # Extract VTFCmd.exe and VTFLib.dll from the zip
+        with zipfile.ZipFile(io.BytesIO(download_data)) as zf:
+            vtfcmd_found = False
+            vtflib_found = False
+            devil_found = False
+            
+            # List all files to debug
+            print(f"Archive contents: {zf.namelist()}")
+            
+            for file_info in zf.namelist():
+                # Extract VTFCmd.exe (prefer x64 version)
+                if 'VTFCmd.exe' in file_info and not vtfcmd_found:
+                    if 'x64' in file_info:  # Prefer x64 version
+                        with open(vtfcmd_path, 'wb') as f:
+                            f.write(zf.read(file_info))
+                        vtfcmd_found = True
+                        print(f"[OK] Extracted VTFCmd.exe from: {file_info}")
+                
+                # Extract VTFLib.dll (prefer x64 version)
+                if 'VTFLib.dll' in file_info and not vtflib_found:
+                    if 'x64' in file_info:  # Prefer x64 version
+                        with open(vtflib_path, 'wb') as f:
+                            f.write(zf.read(file_info))
+                        vtflib_found = True
+                        print(f"[OK] Extracted VTFLib.dll from: {file_info}")
+                
+                # Extract DevIL.dll (required dependency)
+                if 'DevIL.dll' in file_info and not devil_found:
+                    if 'x64' in file_info:  # Prefer x64 version
+                        devil_path = os.path.join(tools_dir, 'DevIL.dll')
+                        with open(devil_path, 'wb') as f:
+                            f.write(zf.read(file_info))
+                        devil_found = True
+                        print(f"[OK] Extracted DevIL.dll from: {file_info}")
+                
+                if vtfcmd_found and vtflib_found and devil_found:
+                    break
+        
+        if os.path.exists(vtfcmd_path) and os.path.exists(vtflib_path):
+            print(f"[OK] VTF tools downloaded successfully to: {tools_dir}")
+            return vtfcmd_path
+        else:
+            print("[ERROR] Failed to extract required VTF tools from archive")
+            return None
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to download VTF tools: {e}")
+        print("You can manually download VTFEdit from: https://github.com/NeilJed/VTFLib/releases")
+        print(f"And place VTFCmd.exe and VTFLib.dll in: {tools_dir}")
+        return None
+
+VTFCMD_PATH = None  # Will be checked when conversion starts
 try:
-    from vtf2img import Parser
-except ImportError:
-    print("Error: The 'vtf2img' library is required for VTF conversion.")
-    print("Please install it using: pip install vtf2img")
-    sys.exit(1)
+    VTFCMD_PATH = find_vtfcmd()
+    if VTFCMD_PATH:
+        print(f"[OK] VTFCmd.exe found at: {VTFCMD_PATH}")
+except Exception as e:
+    print(f"Note: VTFCmd.exe will be downloaded when needed: {e}")
+
+print(f"[OK] Using VTFCmd.exe from: {VTFCMD_PATH}")
+# -----------------------------------
 
 # --- Image Stitching Library ---
 try:
@@ -90,16 +203,15 @@ EXR_TRANSFORMS = {
 # 2. Configuration for all other formats (VTF, PNG, JPG, etc.) - Standard 1:1 Cubemap
 # --- CORRECTED STANDARD ROTATIONS FOR NON-EXR FILES (VTF/PNG) ---
 DEFAULT_TRANSFORMS = {
-    # Standard 1:1 cubemap - no remapping needed for px/nx/py/ny/pz/nz naming
-    # Each face goes directly to its corresponding slot
+    # Standard cubemap projection (VTF/Source) requires a 180-degree rotation on UP/DOWN for 4x3 format.
+    # The image file names must match the target slot name.
     'up':      ('up', 0, None),
     'down':    ('down', 0, None),
-    'left':    ('left', 0, None), 
-    'front':   ('front', 0, None),
-    'right':   ('right', 0, None), 
-    'back':    ('back', 0, None),
+    'left':    ('back', 0, None), 
+    'front':   ('right', 0, None),
+    'right':   ('front', 0, None), 
+    'back':    ('left', 0, None),
 }
-# --- END CORRECTED ROTATIONS ---
 
 # 3. Configuration for HL2/TF2 Dome Map files (2:1 aspect ratio on horizontal faces)
 # The faces are typically named back, up, rt, ft, lf, dn (or similar).
@@ -355,7 +467,7 @@ def find_cubemap_files(directory="."):
                         if name_no_ext.endswith(keyword) or name_no_ext == keyword:
                             found_files[face_name] = fpath
                             found = True
-                            print(f"    ✓ MATCHED! Found file for '{face_name}': {os.path.basename(fpath)} (matched keyword: '{keyword}')")
+                            print(f"    [OK] MATCHED! Found file for '{face_name}': {os.path.basename(fpath)} (matched keyword: '{keyword}')")
                             break
                         else:
                             print(f"    - No match for keyword '{keyword}' (endswith: {name_no_ext.endswith(keyword)}, equals: {name_no_ext == keyword})")
@@ -385,7 +497,7 @@ def find_cubemap_files(directory="."):
 
 def convert_vtf_to_png(vtf_path, output_dir):
     """
-    Converts a single VTF file to a PNG file, saving it in the specified output_dir.
+    Converts a single VTF file to a PNG file using VTFCmd.exe, saving it in the specified output_dir.
     """
     base_name = os.path.basename(vtf_path)
     png_filename = os.path.splitext(base_name)[0] + ".temp_converted.png" 
@@ -394,22 +506,81 @@ def convert_vtf_to_png(vtf_path, output_dir):
     print(f"Converting '{base_name}' to PNG...")
 
     try:
-        parser = Parser(vtf_path)
-        image = parser.get_image()
-        # Ensure image is in RGBA format before saving
-        image = image.convert("RGBA")
-        image.save(png_path, "PNG")
+        import subprocess
+        
+        # VTFCmd.exe command: VTFCmd.exe -file "input.vtf" -output "output_folder" -exportformat "png"
+        # Use absolute paths to avoid issues
+        abs_vtf_path = os.path.abspath(vtf_path)
+        abs_output_dir = os.path.abspath(output_dir)
+        
+        # Get VTFCmd.exe directory to ensure VTFLib.dll is accessible
+        vtfcmd_dir = os.path.dirname(VTFCMD_PATH)
+        vtflib_path = os.path.join(vtfcmd_dir, 'VTFLib.dll')
+        
+        # Check if VTFLib.dll exists alongside VTFCmd.exe
+        if not os.path.exists(vtflib_path):
+            raise Exception(f"VTFLib.dll not found at: {vtflib_path}")
+        
+        # VTFCmd.exe command for VTF to PNG conversion
+        # Based on VTFCmd documentation: vtfcmd.exe -file "input.vtf" -output "output_dir" -exportformat "png"
+        cmd = [
+            VTFCMD_PATH,
+            '-file', abs_vtf_path,
+            '-output', abs_output_dir,
+            '-exportformat', 'png'
+        ]
+        
+        # Run VTFCmd.exe from its own directory to ensure DLL loading works
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=vtfcmd_dir,  # Set working directory to VTFCmd.exe location
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        
+        # Always show VTFCmd output for debugging
+        if result.stdout:
+            print(f"VTFCmd.exe stdout: {result.stdout}")
+        if result.stderr:
+            print(f"VTFCmd.exe stderr: {result.stderr}")
+        
+        if result.returncode != 0:
+            print(f"VTFCmd.exe failed with return code {result.returncode}")
+            raise Exception(f"VTFCmd.exe failed with return code {result.returncode}")
+        
+        # VTFCmd exports as "basename.png" in the output folder
+        expected_png = os.path.join(abs_output_dir, os.path.splitext(base_name)[0] + '.png')
+        
+        # Check if the file was created with the expected name
+        if os.path.exists(expected_png):
+            # Rename to our expected temp filename if different
+            if expected_png != png_path:
+                if os.path.exists(png_path):
+                    os.remove(png_path)
+                os.rename(expected_png, png_path)
+        else:
+            # List what files were actually created
+            output_files = [f for f in os.listdir(abs_output_dir) if f.endswith('.png')]
+            print(f"Expected file not found. Files in output directory: {output_files}")
+            
+            if output_files:
+                # Use the first PNG file found
+                actual_png = os.path.join(abs_output_dir, output_files[0])
+                if os.path.exists(png_path):
+                    os.remove(png_path)
+                os.rename(actual_png, png_path)
+                print(f"Using file: {output_files[0]} -> {os.path.basename(png_path)}")
+        
+        if not os.path.exists(png_path):
+            raise Exception(f"VTFCmd.exe did not create expected output file: {png_path}")
+        
         print(f"     -> Saved temporary file: {os.path.basename(png_path)}")
         return png_path
-    except Exception as e:
-        # Check for the specific error related to format 3 to give a helpful message
-        if "Unknown image format 3" in str(e):
-             print(f"\nFATAL VTF ERROR: Failed to convert '{base_name}'.")
-             print("This VTF uses a rare compression format (Type 3) that is not supported by the Python library.")
-             print("Please use VTFEdit to manually export this specific file to PNG/TGA before running the script.")
-             raise
         
+    except Exception as e:
         print(f"Error converting VTF file '{vtf_path}': {e}")
+        print(f"Make sure VTFCmd.exe is accessible at: {VTFCMD_PATH}")
         # Re-raise the exception to stop the stitching process
         raise
 
@@ -428,10 +599,9 @@ def generate_vmat_content_and_save(vmat_path, content, material_type):
         print(f"ERROR: Could not write VMAT file to {vmat_path}. Error: {e}")
 
 
-def create_vmat_file_optionally(skybox_vmat_path, moondome_vmat_path, sky_texture_path):
+def create_vmat_files_conditionally(skybox_vmat_path, moondome_vmat_path, sky_texture_path, create_skybox, create_moondome):
     """
-    Asks the user which VMAT files they want to create using popup windows.
-    Now requires the sky_texture_path to generate content dynamically.
+    Creates VMAT files based on environment variables instead of popup dialogs.
     """
     print("\n" + "=" * 50)
     print("VMAT Generation Phase")
@@ -439,47 +609,29 @@ def create_vmat_file_optionally(skybox_vmat_path, moondome_vmat_path, sky_textur
     
     saved_count = 0
     
-    # Initialize tkinter root window (hidden)
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-    
     # Generate content with the resolved path
     ldr_content = get_ldr_vmat_content(sky_texture_path)
     moondome_content = get_moondome_vmat_content(sky_texture_path)
 
-    # --- 1. Skybox VMAT Prompt ---
-    try:
-        choice_skybox = messagebox.askyesno(
-            "Skybox Material", 
-            "Do you want to create a Skybox Material?\n\n(Uses standard sky.vfx shader)",
-            parent=root
-        )
-        if choice_skybox:
+    # --- 1. Skybox VMAT Creation ---
+    if create_skybox:
+        try:
             generate_vmat_content_and_save(skybox_vmat_path, ldr_content, "Skybox")
             saved_count += 1
-        else:
-            print("Skybox VMAT creation skipped.")
-    except Exception as e:
-        print(f"Skybox VMAT creation skipped due to error: {e}")
+        except Exception as e:
+            print(f"Skybox VMAT creation failed: {e}")
+    else:
+        print("Skybox VMAT creation skipped.")
 
-    # --- 2. Moondome VMAT Prompt ---
-    try:
-        choice_moondome = messagebox.askyesno(
-            "Moondome Material", 
-            "Do you want to create a Moondome Material?\n\n(Uses csgo_moondome.vfx shader)",
-            parent=root
-        )
-        if choice_moondome:
+    # --- 2. Moondome VMAT Creation ---
+    if create_moondome:
+        try:
             generate_vmat_content_and_save(moondome_vmat_path, moondome_content, "Moondome")
             saved_count += 1
-        else:
-            print("Moondome VMAT creation skipped.")
-    except Exception as e:
-        print(f"Moondome VMAT creation skipped due to error: {e}")
-    
-    # Clean up tkinter root
-    root.destroy()
+        except Exception as e:
+            print(f"Moondome VMAT creation failed: {e}")
+    else:
+        print("Moondome VMAT creation skipped.")
         
     print("-" * 50)
     if saved_count > 0:
@@ -564,6 +716,105 @@ def clean_up_source_files(filenames_map, directory):
         print("\nCleanup skipped. Original source materials were preserved.")
         
     print("=" * 50)
+
+
+def clean_up_source_files_conditionally(filenames_map, input_directory, should_cleanup):
+    """
+    Clean up source files based on environment variable instead of popup dialog.
+    """
+    # Collect files to delete
+    files_to_delete = []
+    
+    for target_slot in ['up', 'down', 'left', 'right', 'front', 'back']:
+        if target_slot in filenames_map and filenames_map[target_slot]:
+            # filenames_map contains full paths, not just filenames
+            source_path = filenames_map[target_slot]
+            if os.path.exists(source_path):
+                files_to_delete.append(source_path)
+                # Also add .vmt files if they exist
+                vmt_path = os.path.splitext(source_path)[0] + '.vmt'
+                if os.path.exists(vmt_path):
+                    files_to_delete.append(vmt_path)
+
+    if not files_to_delete:
+        print("\nNo original source materials (.vtf, .png, .exr, etc.) or associated .vmt files were used/found for cleanup.")
+        return
+
+    # --- Cleanup Phase Header ---
+    print("\n" + "=" * 50)
+    print("Cleanup Phase: Delete Source Materials")
+    print("=" * 50)
+    print("The following original source materials were used:")
+    for f in files_to_delete:
+        print(f" - {os.path.basename(f)}")
+
+    if should_cleanup:
+        print("\nCleaning up source files...")
+        deleted_count = 0
+        for f in files_to_delete:
+            try:
+                os.remove(f)
+                print(f"     -> Removed: {os.path.basename(f)}")
+                deleted_count += 1
+            except Exception as e:
+                print(f"     -> Failed to remove {os.path.basename(f)}: {e}")
+        
+        print("-" * 50)
+        if deleted_count > 0:
+            print(f"Cleanup completed: Removed {deleted_count} file(s)")
+        else:
+            print("Cleanup completed: No files were removed due to errors")
+    else:
+        print("\nCleanup skipped.")
+        print("-" * 50)
+
+
+def clean_up_original_source_files(original_file_list):
+    """
+    Clean up the original source files selected by the user.
+    """
+    if not original_file_list:
+        print("\nNo original source files to clean up.")
+        return
+
+    # Filter for existing files
+    files_to_delete = [f for f in original_file_list if f and os.path.exists(f)]
+    
+    if not files_to_delete:
+        print("\nNo original source files found for cleanup.")
+        return
+
+    # --- Cleanup Phase Header ---
+    print("\n" + "=" * 50)
+    print("Cleanup Phase: Delete Original Source Files")
+    print("=" * 50)
+    print("The following original source files will be deleted:")
+    for f in files_to_delete:
+        print(f" - {os.path.basename(f)}")
+
+    print("\nDeleting original source files...")
+    deleted_count = 0
+    for f in files_to_delete:
+        try:
+            os.remove(f)
+            print(f"     -> Removed: {os.path.basename(f)}")
+            deleted_count += 1
+            
+            # Also try to remove associated .vmt files
+            vmt_path = os.path.splitext(f)[0] + '.vmt'
+            if os.path.exists(vmt_path):
+                os.remove(vmt_path)
+                print(f"     -> Removed: {os.path.basename(vmt_path)}")
+                deleted_count += 1
+                
+        except Exception as e:
+            print(f"     -> Failed to remove {os.path.basename(f)}: {e}")
+    
+    print("-" * 50)
+    if deleted_count > 0:
+        print(f"Cleanup completed: Removed {deleted_count} original file(s)")
+    else:
+        print("Cleanup completed: No files were removed due to errors")
 
 
 def stitch_cubemap_rotated(filenames_map, output_file_path, temp_dir):
@@ -808,12 +1059,22 @@ def stitch_cubemap_rotated(filenames_map, output_file_path, temp_dir):
 
 if __name__ == "__main__":
     
+    # Read environment variables set by the GUI
+    INPUT_DIRECTORY = os.environ.get('SKYBOX_INPUT_DIR', '.')
+    OUTPUT_DIR = os.environ.get('SKYBOX_OUTPUT_DIR', 'skybox')
+    FINAL_PREFIX = os.environ.get('SKYBOX_PREFIX', 'skybox_custom')
+    
+    # Read conversion options from environment
+    CREATE_SKYBOX_VMAT = os.environ.get('CREATE_SKYBOX_VMAT', '0') == '1'
+    CREATE_MOONDOME_VMAT = os.environ.get('CREATE_MOONDOME_VMAT', '0') == '1'
+    CLEANUP_SOURCE_FILES = os.environ.get('CLEANUP_SOURCE_FILES', '0') == '1'
+    
     # 1. Find the 6 required cubemap files by keyword
     file_map = find_cubemap_files(INPUT_DIRECTORY)
     
-    # 2. Determine the dynamic prefix
-    DYNAMIC_PREFIX = determine_skybox_prefix(file_map)
-    print(f"\n--- Determined Skybox Prefix: '{DYNAMIC_PREFIX}' ---")
+    # 2. Use the user-provided prefix from environment variable
+    DYNAMIC_PREFIX = os.environ.get('SKYBOX_PREFIX', 'skybox_custom')
+    print(f"\n--- Using User-Provided Skybox Prefix: '{DYNAMIC_PREFIX}' ---")
     
     # 3. Update all global paths and filenames based on the new prefix
     # Output file paths
@@ -832,13 +1093,20 @@ if __name__ == "__main__":
     success = stitch_cubemap_rotated(file_map, FINAL_OUTPUT_PATH, OUTPUT_DIR)
     
     # 5. Optional VMAT creation after successful stitching
-    if success:
-        # Calls the function that handles the VMAT choices, passing the dynamic path
-        create_vmat_file_optionally(FINAL_SKYBOX_VMAT_PATH, FINAL_MOONDOME_VMAT_PATH, SKYTEXTURE_PATH)
+    if success and (CREATE_SKYBOX_VMAT or CREATE_MOONDOME_VMAT):
+        create_vmat_files_conditionally(FINAL_SKYBOX_VMAT_PATH, FINAL_MOONDOME_VMAT_PATH, SKYTEXTURE_PATH, CREATE_SKYBOX_VMAT, CREATE_MOONDOME_VMAT)
         
     # 6. Optional source file cleanup after VMAT creation
     if success:
-        clean_up_source_files(file_map, INPUT_DIRECTORY)
+        # Check if we have original file paths to clean up
+        original_paths = os.environ.get('ORIGINAL_FILE_PATHS', '')
+        if original_paths and CLEANUP_SOURCE_FILES:
+            # Split the pipe-separated original file paths
+            original_file_list = original_paths.split('|')
+            clean_up_original_source_files(original_file_list)
+        else:
+            # Fallback to cleaning up temporary files only
+            clean_up_source_files_conditionally(file_map, INPUT_DIRECTORY, CLEANUP_SOURCE_FILES)
         
     # 7. Final Confirmation and Auto-Exit
     print("\n" + "=" * 50)
