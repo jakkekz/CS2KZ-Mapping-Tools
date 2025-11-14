@@ -166,6 +166,10 @@ jobs:
             --hidden-import=numpy `
             --add-data="scripts;scripts" `
             --add-data="vtf;vtf" `
+            --collect-all imgui `
+            --collect-all glfw `
+            --collect-all OpenGL `
+            --collect-binaries glfw `
             scripts/skybox_gui.py
           
           # Build VTF2PNG (onedir for faster startup, with console for debugging)
@@ -234,7 +238,41 @@ jobs:
 
       - name: Build CS2KZMappingTools.exe (One-File)
         run: |
+          # Build console version (with command window)
           pyinstaller --onefile `
+            --name=CS2KZMappingTools `
+            --icon=icons/hammerkz.ico `
+            --add-data="icons;icons" `
+            --add-data="scripts;scripts" `
+            --add-data="utils;utils" `
+            --add-data="chars;chars" `
+            --add-data="fonts;fonts" `
+            --add-data="gui_tools;gui_tools" `
+            --add-data="python-embed;python-embed" `
+            --add-data="vtf;vtf" `
+            --collect-all imgui `
+            --collect-all glfw `
+            --collect-all OpenGL `
+            --collect-all PIL `
+            --hidden-import=PIL._tkinter_finder `
+            --hidden-import=PIL.ImageDraw `
+            --hidden-import=PIL.ImageFont `
+            --hidden-import=PIL.ImageTk `
+            --hidden-import=vdf `
+            --hidden-import=psutil `
+            --hidden-import=requests `
+            --hidden-import=vtf2img `
+            --hidden-import=numpy `
+            --hidden-import=vpk `
+            --hidden-import=scripts.creator `
+            --hidden-import=scripts.SkyboxConverter `
+            main.py
+            
+          # Rename console version
+          Move-Item -Path "dist/CS2KZMappingTools.exe" -Destination "dist/CS2KZMappingTools-console.exe"
+          
+          # Build windowed version (no command window)
+          pyinstaller --onefile --noconsole `
             --name=CS2KZMappingTools `
             --icon=icons/hammerkz.ico `
             --add-data="icons;icons" `
@@ -267,7 +305,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cs2kz-mapping-tools-exe
-          path: dist/CS2KZMappingTools.exe
+          path: |
+            dist/CS2KZMappingTools.exe
+            dist/CS2KZMappingTools-console.exe
 
   release:
     needs: build
@@ -312,7 +352,9 @@ jobs:
       - name: Create and Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./artifacts/CS2KZMappingTools.exe
+          files: |
+            ./artifacts/CS2KZMappingTools.exe
+            ./artifacts/CS2KZMappingTools-console.exe
           tag_name: ${{ env.TAG_NAME }}
           name: CS2KZ Mapping Tools - ${{ env.TAG_NAME }}
         env:

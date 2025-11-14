@@ -38,7 +38,13 @@ class UpdateChecker:
                 timestamp = os.path.getmtime(exe_path)
                 # Store as UTC datetime for consistency with GitHub API
                 self.current_version_date = datetime.fromtimestamp(timestamp)
+                
+                # Detect if running console version
+                exe_name = os.path.basename(exe_path).lower()
+                self.is_console_version = 'console' in exe_name
+                
                 print(f"[Update] Running as executable: {exe_path}")
+                print(f"[Update] Console version detected: {self.is_console_version}")
                 print(f"[Update] Executable timestamp (UTC): {timestamp}")
                 print(f"[Update] Executable date (local): {self.current_version_date}")
                 return timestamp
@@ -48,12 +54,14 @@ class UpdateChecker:
                 timestamp = os.path.getmtime(main_py)
                 # Store as UTC datetime for consistency with GitHub API
                 self.current_version_date = datetime.fromtimestamp(timestamp)
+                self.is_console_version = False  # Default for script
                 print(f"[Update] Running as script: {main_py}")
                 print(f"[Update] Script timestamp (UTC): {timestamp}")
                 print(f"[Update] Script date (local): {self.current_version_date}")
                 return timestamp
         except Exception as e:
             print(f"[Update] Error getting current version: {e}")
+            self.is_console_version = False
             return 0
     
     def should_check_for_updates(self):
@@ -102,22 +110,32 @@ class UpdateChecker:
                 # Compare with current version
                 if release_timestamp > self.current_version:
                     print(f"[Update] Release is newer! ({release_timestamp} > {self.current_version})")
-                    # Find the .exe asset
+                    # Find the correct .exe asset based on current version type
                     assets = data.get('assets', [])
                     print(f"[Update] Found {len(assets)} assets")
+                    
+                    target_asset_name = None
                     for asset in assets:
                         name = asset.get('name', '')
                         print(f"[Update] Asset: {name}")
                         if name.endswith('.exe') and 'CS2KZ' in name and 'MappingTools' in name:
-                            self.update_available = True
-                            self.latest_download_url = asset.get('browser_download_url')
-                            self.latest_version = release_timestamp
-                            self.latest_version_tag = release_tag
-                            self.latest_version_date = release_time
-                            print(f"[Update] ✓ Update available! {name}")
-                            print(f"[Update] Download URL: {self.latest_download_url}")
-                            return True
-                    print("[Update] No matching .exe asset found")
+                            # Check if this matches the current version type
+                            is_console_asset = 'console' in name.lower()
+                            
+                            if self.is_console_version == is_console_asset:
+                                target_asset_name = name
+                                self.update_available = True
+                                self.latest_download_url = asset.get('browser_download_url')
+                                self.latest_version = release_timestamp
+                                self.latest_version_tag = release_tag
+                                self.latest_version_date = release_time
+                                print(f"[Update] ✓ Found matching version: {name} (console: {is_console_asset})")
+                                print(f"[Update] Download URL: {self.latest_download_url}")
+                                return True
+                    
+                    if not target_asset_name:
+                        version_type = "console" if self.is_console_version else "windowed"
+                        print(f"[Update] No matching {version_type} version found in assets")
                 else:
                     print(f"[Update] Release is not newer ({release_timestamp} <= {self.current_version})")
                 
