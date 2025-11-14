@@ -483,6 +483,24 @@ class ImGuiApp:
             print(f"  ✓ {files_restored} files restored")
             if files_failed > 0:
                 print(f"  ✗ {files_failed} files failed")
+            
+            # Check for and restore vpk.signatures.old
+            vpk_signatures_old = os.path.join(cs2_path, 'game', 'csgo', 'vpk.signatures.old')
+            vpk_signatures = os.path.join(cs2_path, 'game', 'csgo', 'vpk.signatures')
+            
+            if os.path.exists(vpk_signatures_old):
+                try:
+                    # Remove existing vpk.signatures if it exists
+                    if os.path.exists(vpk_signatures):
+                        os.remove(vpk_signatures)
+                    
+                    # Rename vpk.signatures.old back to vpk.signatures
+                    os.rename(vpk_signatures_old, vpk_signatures)
+                    print(f"  ✓ Restored vpk.signatures from backup")
+                    
+                except Exception as e:
+                    print(f"  ✗ Failed to restore vpk.signatures: {e}")
+            
             print("\nGame files have been restored to their original state.")
             print("(Addons folder preserved)")
             
