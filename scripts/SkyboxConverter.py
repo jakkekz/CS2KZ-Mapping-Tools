@@ -1082,8 +1082,8 @@ if __name__ == "__main__":
     FINAL_SKYBOX_VMAT_FILENAME = f"skybox_{DYNAMIC_PREFIX}.vmat"
     FINAL_MOONDOME_VMAT_FILENAME = f"moondome_{DYNAMIC_PREFIX}.vmat"
     
-    # Engine texture path for VMAT
-    SKYTEXTURE_PATH = f"materials/{OUTPUT_DIR}/{FINAL_OUTPUT_FILENAME}"
+    # Engine texture path for VMAT (always relative: materials/skybox/filename.png)
+    SKYTEXTURE_PATH = f"materials/skybox/{FINAL_OUTPUT_FILENAME}"
 
     FINAL_OUTPUT_PATH = os.path.join(OUTPUT_DIR, FINAL_OUTPUT_FILENAME)
     FINAL_SKYBOX_VMAT_PATH = os.path.join(OUTPUT_DIR, FINAL_SKYBOX_VMAT_FILENAME)
