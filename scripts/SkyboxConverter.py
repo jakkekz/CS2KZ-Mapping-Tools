@@ -76,43 +76,41 @@ def find_vtfcmd():
         with urllib.request.urlopen(download_url, timeout=30) as response:
             download_data = response.read()
         
-        # Extract VTFCmd.exe and VTFLib.dll from the zip
+        # Extract all required VTF tools and dependencies from the zip
         with zipfile.ZipFile(io.BytesIO(download_data)) as zf:
-            vtfcmd_found = False
-            vtflib_found = False
-            devil_found = False
+            # Required files to extract (all x64 versions)
+            required_files = {
+                'VTFCmd.exe': vtfcmd_path,
+                'VTFLib.dll': vtflib_path,
+                'DevIL.dll': os.path.join(tools_dir, 'DevIL.dll'),
+                'ILU.dll': os.path.join(tools_dir, 'ILU.dll'),
+                'ILUT.dll': os.path.join(tools_dir, 'ILUT.dll')
+            }
+            found_files = set()
             
             # List all files to debug
             print(f"Archive contents: {zf.namelist()}")
             
             for file_info in zf.namelist():
-                # Extract VTFCmd.exe (prefer x64 version)
-                if 'VTFCmd.exe' in file_info and not vtfcmd_found:
-                    if 'x64' in file_info:  # Prefer x64 version
-                        with open(vtfcmd_path, 'wb') as f:
-                            f.write(zf.read(file_info))
-                        vtfcmd_found = True
-                        print(f"[OK] Extracted VTFCmd.exe from: {file_info}")
+                # Extract each required file (prefer x64 version)
+                for filename, output_path in required_files.items():
+                    if filename in file_info and filename not in found_files:
+                        if 'x64' in file_info:  # Prefer x64 version
+                            with open(output_path, 'wb') as f:
+                                f.write(zf.read(file_info))
+                            found_files.add(filename)
+                            print(f"[OK] Extracted {filename} from: {file_info}")
+                            break
                 
-                # Extract VTFLib.dll (prefer x64 version)
-                if 'VTFLib.dll' in file_info and not vtflib_found:
-                    if 'x64' in file_info:  # Prefer x64 version
-                        with open(vtflib_path, 'wb') as f:
-                            f.write(zf.read(file_info))
-                        vtflib_found = True
-                        print(f"[OK] Extracted VTFLib.dll from: {file_info}")
-                
-                # Extract DevIL.dll (required dependency)
-                if 'DevIL.dll' in file_info and not devil_found:
-                    if 'x64' in file_info:  # Prefer x64 version
-                        devil_path = os.path.join(tools_dir, 'DevIL.dll')
-                        with open(devil_path, 'wb') as f:
-                            f.write(zf.read(file_info))
-                        devil_found = True
-                        print(f"[OK] Extracted DevIL.dll from: {file_info}")
-                
-                if vtfcmd_found and vtflib_found and devil_found:
+                # Stop if all required files are found
+                if len(found_files) >= len(required_files):
                     break
+            
+            # Report missing files
+            missing = set(required_files.keys()) - found_files
+            if missing:
+                print(f"[WARNING] Missing files: {', '.join(missing)}")
+                print("VTF conversion may fail without all dependencies")
         
         if os.path.exists(vtfcmd_path) and os.path.exists(vtflib_path):
             print(f"[OK] VTF tools downloaded successfully to: {tools_dir}")

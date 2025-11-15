@@ -103,15 +103,35 @@ jobs:
             # Create vtf directory
             New-Item -ItemType Directory -Force -Path "vtf"
             
-            # Find and copy VTFCmd.exe and VTFLib.dll from the extracted files
-            Get-ChildItem -Path "vtf-temp" -Recurse -Name "VTFCmd.exe" | ForEach-Object {
-              Copy-Item -Path "vtf-temp\$_" -Destination "vtf\VTFCmd.exe" -Force
-              Write-Host "Found and copied VTFCmd.exe"
+            # Find and copy all required VTF tools (x64 versions)
+            # VTFCmd.exe - the command line tool
+            Get-ChildItem -Path "vtf-temp" -Recurse -Filter "VTFCmd.exe" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "vtf\VTFCmd.exe" -Force
+              Write-Host "Found and copied VTFCmd.exe from: $($_.FullName)"
             }
             
-            Get-ChildItem -Path "vtf-temp" -Recurse -Name "VTFLib.dll" | ForEach-Object {
-              Copy-Item -Path "vtf-temp\$_" -Destination "vtf\VTFLib.dll" -Force
-              Write-Host "Found and copied VTFLib.dll"
+            # VTFLib.dll - the main VTF library
+            Get-ChildItem -Path "vtf-temp" -Recurse -Filter "VTFLib.dll" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "vtf\VTFLib.dll" -Force
+              Write-Host "Found and copied VTFLib.dll from: $($_.FullName)"
+            }
+            
+            # DevIL.dll - image library dependency
+            Get-ChildItem -Path "vtf-temp" -Recurse -Filter "DevIL.dll" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "vtf\DevIL.dll" -Force
+              Write-Host "Found and copied DevIL.dll from: $($_.FullName)"
+            }
+            
+            # ILU.dll - DevIL utility library
+            Get-ChildItem -Path "vtf-temp" -Recurse -Filter "ILU.dll" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "vtf\ILU.dll" -Force
+              Write-Host "Found and copied ILU.dll from: $($_.FullName)"
+            }
+            
+            # ILUT.dll - DevIL toolkit library
+            Get-ChildItem -Path "vtf-temp" -Recurse -Filter "ILUT.dll" | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "vtf\ILUT.dll" -Force
+              Write-Host "Found and copied ILUT.dll from: $($_.FullName)"
             }
             
             # If VTFCmd.exe not found, try VTFEdit.exe as alternative
@@ -126,17 +146,22 @@ jobs:
             Remove-Item "vtfedit.zip" -ErrorAction SilentlyContinue
             Remove-Item "vtf-temp" -Recurse -Force -ErrorAction SilentlyContinue
             
-            # Verify files were copied
-            if (Test-Path "vtf\VTFCmd.exe") {
-              Write-Host "✓ VTFCmd.exe bundled successfully"
-            } else {
-              Write-Host "✗ VTFCmd.exe not found after extraction"
+            # Verify all required files were copied
+            $vtfFiles = @("VTFCmd.exe", "VTFLib.dll", "DevIL.dll", "ILU.dll", "ILUT.dll")
+            $allFound = $true
+            foreach ($file in $vtfFiles) {
+              if (Test-Path "vtf\$file") {
+                Write-Host "✓ $file bundled successfully"
+              } else {
+                Write-Host "✗ $file not found after extraction"
+                $allFound = $false
+              }
             }
             
-            if (Test-Path "vtf\VTFLib.dll") {
-              Write-Host "✓ VTFLib.dll bundled successfully" 
+            if ($allFound) {
+              Write-Host "`n✓ All VTF tools and dependencies bundled successfully"
             } else {
-              Write-Host "✗ VTFLib.dll not found after extraction"
+              Write-Host "`n✗ Some VTF files are missing - conversion may fail"
             }
           }
 
