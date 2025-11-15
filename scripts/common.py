@@ -1,7 +1,12 @@
 import time
 import winreg
 import os
-import vdf
+try:
+    import vdf
+    VDF_AVAILABLE = True
+except ImportError:
+    VDF_AVAILABLE = False
+    print("Warning: vdf module not available. CS2 path detection will not work.")
 import subprocess
 import shutil
 import psutil
@@ -20,6 +25,10 @@ def get_steam_directory():
 
 def find_cs2_library_path(libraryfolders_path):
     """Parse the libraryfolders.vdf file to get all library paths."""
+    if not VDF_AVAILABLE:
+        print("vdf module not available - cannot parse library folders")
+        return None
+    
     if not os.path.exists(libraryfolders_path):
         print(f"libraryfolders.vdf not found at {libraryfolders_path}")
         return []
@@ -35,6 +44,10 @@ def find_cs2_library_path(libraryfolders_path):
     return None
 
 def get_cs2_path():
+    if not VDF_AVAILABLE:
+        print("vdf module not available - cannot detect CS2 path")
+        return None
+    
     steam_path = get_steam_directory()
     if steam_path is None:
         return None

@@ -1,22 +1,29 @@
 """
 VTF to PNG Converter - GUI Version
-Allows user to select multiple VTF files and converts them to PNG
+Allows user to select multiple VTF files and converts them to PNG using VTFCmd.exe
 """
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from PIL import Image
 import os
 import sys
+import subprocess
+import tempfile
+import urllib.request
+import zipfile
+import io
 
-# Try to import VTF support
+# Import VTF conversion from vtf2png.py
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+
 try:
-    from vtf2img import Parser
-    VTF_SUPPORT = True
-except ImportError:
+    from vtf2png import find_vtfcmd, VTFCMD_PATH
+    VTF_SUPPORT = VTFCMD_PATH is not None
+except Exception as e:
     VTF_SUPPORT = False
-    print("Warning: vtf2img library not found. VTF conversion will not work.")
-    print("Install with: pip install vtf2img")
+    VTFCMD_PATH = None
+    print(f"Warning: VTF tools not found: {e}")
 
 # Helper function for PyInstaller resource paths
 def resource_path(relative_path):
@@ -30,7 +37,7 @@ def resource_path(relative_path):
 
 def convert_vtf_to_png(vtf_path, output_path=None):
     """
-    Convert a single VTF file to PNG.
+    Convert a single VTF file to PNG using VTFCmd.exe.
     
     Args:
         vtf_path: Path to the VTF file
@@ -39,28 +46,59 @@ def convert_vtf_to_png(vtf_path, output_path=None):
     Returns:
         tuple: (success: bool, message: str)
     """
-    if not VTF_SUPPORT:
-        return False, "vtf2img library is not installed"
+    if not VTF_SUPPORT or not VTFCMD_PATH:
+        return False, "VTFCmd.exe is not available"
     
     try:
-        # Parse VTF file
-        parser = Parser(vtf_path)
-        image = parser.get_image()
+        base_name = os.path.basename(vtf_path)
         
-        # Ensure RGBA format
-        image = image.convert("RGBA")
-        
-        # Determine output path
+        # Determine output directory
         if output_path is None:
+            output_dir = os.path.dirname(vtf_path) or '.'
             output_path = os.path.splitext(vtf_path)[0] + '.png'
+        else:
+            output_dir = os.path.dirname(output_path) or '.'
         
-        # Save as PNG
-        image.save(output_path, "PNG")
-        return True, output_path
+        # Use absolute paths
+        abs_vtf_path = os.path.abspath(vtf_path)
+        abs_output_dir = os.path.abspath(output_dir)
+        
+        # Get VTFCmd.exe directory to ensure VTFLib.dll is accessible
+        vtfcmd_dir = os.path.dirname(VTFCMD_PATH)
+        vtflib_path = os.path.join(vtfcmd_dir, 'VTFLib.dll')
+        
+        if not os.path.exists(vtflib_path):
+            return False, f"VTFLib.dll not found at: {vtflib_path}"
+        
+        # VTFCmd.exe command for VTF to PNG conversion
+        cmd = [
+            VTFCMD_PATH,
+            '-file', abs_vtf_path,
+            '-output', abs_output_dir,
+            '-exportformat', 'png'
+        ]
+        
+        # Run VTFCmd.exe from its own directory to ensure DLL loading works
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=vtfcmd_dir,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr if result.stderr else f"VTFCmd.exe failed with return code {result.returncode}"
+            return False, f"Conversion error: {error_msg}"
+        
+        # Check if output file was created
+        expected_png = os.path.join(abs_output_dir, os.path.splitext(base_name)[0] + '.png')
+        if os.path.exists(expected_png):
+            return True, expected_png
+        else:
+            return False, "Output file was not created"
         
     except Exception as e:
-        if "Unknown image format 3" in str(e):
-            return False, f"Rare compression format (Type 3) not supported.\nUse VTFEdit to export manually."
         return False, f"Conversion error: {str(e)}"
 
 
@@ -169,10 +207,10 @@ def main():
             print(f"Could not set window icon: {e}")
         
         messagebox.showerror(
-            "Missing Library",
-            "vtf2img library is not installed.\n\n"
-            "Please install it with:\n"
-            "pip install vtf2img"
+            "VTF Tools Not Found",
+            "VTFCmd.exe could not be found or downloaded.\n\n"
+            "VTF conversion tools are required for this program to work.\n"
+            "Please check your internet connection and try again."
         )
         sys.exit(1)
     

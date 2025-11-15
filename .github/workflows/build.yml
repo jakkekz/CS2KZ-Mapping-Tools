@@ -164,6 +164,7 @@ jobs:
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=numpy `
+            --hidden-import=vdf `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
             --add-data="vtf;vtf" `
@@ -263,7 +264,6 @@ jobs:
             --hidden-import=vdf `
             --hidden-import=psutil `
             --hidden-import=requests `
-            --hidden-import=vtf2img `
             --hidden-import=numpy `
             --hidden-import=vpk `
             --hidden-import=scripts.creator `
@@ -296,7 +296,6 @@ jobs:
             --hidden-import=vdf `
             --hidden-import=psutil `
             --hidden-import=requests `
-            --hidden-import=vtf2img `
             --hidden-import=numpy `
             --hidden-import=vpk `
             --hidden-import=scripts.creator `
