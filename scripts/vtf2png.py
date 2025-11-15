@@ -1,53 +1,159 @@
 """
 VTF to PNG Converter
-Converts all VTF files in the current directory to PNG format
+Converts all VTF files in the current directory to PNG format using VTFCmd.exe
 """
 
 import os
 import sys
+import subprocess
+import tempfile
+import shutil
+import urllib.request
+import zipfile
+import io
 from pathlib import Path
 
-# Try to import VTF support
-try:
-    from vtf2img import Parser
-except ImportError:
-    print("Error: vtf2img library is required.")
-    print("Install it with: pip install vtf2img")
+# --- VTF Tools Path Detection ---
+def find_vtfcmd():
+    """Find VTFCmd.exe in various locations, download if not found"""
+    
+    # Check 1: Bundled VTF tools first (preferred)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    bundled_vtfcmd = os.path.join(project_root, 'vtf', 'VTFCmd.exe')
+    
+    if os.path.exists(bundled_vtfcmd):
+        bundled_vtflib = os.path.join(project_root, 'vtf', 'VTFLib.dll')
+        if os.path.exists(bundled_vtflib):
+            print(f"[OK] Using bundled VTF tools from: {bundled_vtfcmd}")
+            return bundled_vtfcmd
+    
+    # Check 2: .CS2KZ-mapping-tools/vtf folder in Temp
+    temp_dir = os.environ.get('TEMP', os.environ.get('TMP', tempfile.gettempdir()))
+    if temp_dir:
+        tools_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'vtf')
+        vtfcmd_path = os.path.join(tools_dir, 'VTFCmd.exe')
+        vtflib_path = os.path.join(tools_dir, 'VTFLib.dll')
+        
+        if os.path.exists(vtfcmd_path) and os.path.exists(vtflib_path):
+            print(f"[OK] Using cached VTF tools from: {vtfcmd_path}")
+            return vtfcmd_path
+    
+    # Download VTF tools if not found anywhere
+    if not temp_dir:
+        print("[ERROR] Cannot determine temp directory for VTF tools download")
+        return None
+    
+    tools_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'vtf')
+    os.makedirs(tools_dir, exist_ok=True)
+    
+    vtfcmd_path = os.path.join(tools_dir, 'VTFCmd.exe')
+    vtflib_path = os.path.join(tools_dir, 'VTFLib.dll')
+    
+    print("VTF tools not found. Downloading from GitHub...")
+    print("This is a one-time download (~2 MB)...")
+    
+    try:
+        download_url = "https://nemstools.github.io/files/vtflib132-bin.zip"
+        print(f"Downloading VTFLib binaries from {download_url}...")
+        
+        with urllib.request.urlopen(download_url, timeout=30) as response:
+            download_data = response.read()
+        
+        # Extract VTFCmd.exe and VTFLib.dll from the zip
+        with zipfile.ZipFile(io.BytesIO(download_data)) as zf:
+            vtfcmd_found = False
+            vtflib_found = False
+            
+            for file_info in zf.namelist():
+                if 'VTFCmd.exe' in file_info and not vtfcmd_found:
+                    if 'x64' in file_info:
+                        with open(vtfcmd_path, 'wb') as f:
+                            f.write(zf.read(file_info))
+                        vtfcmd_found = True
+                        print(f"[OK] Extracted VTFCmd.exe")
+                
+                if 'VTFLib.dll' in file_info and not vtflib_found:
+                    if 'x64' in file_info:
+                        with open(vtflib_path, 'wb') as f:
+                            f.write(zf.read(file_info))
+                        vtflib_found = True
+                        print(f"[OK] Extracted VTFLib.dll")
+                
+                if vtfcmd_found and vtflib_found:
+                    break
+        
+        if vtfcmd_found and vtflib_found:
+            print(f"[OK] VTF tools installed to: {tools_dir}")
+            return vtfcmd_path
+        else:
+            print("[ERROR] Failed to extract required VTF tools from archive")
+            return None
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to download VTF tools: {e}")
+        return None
+
+# Initialize VTFCmd path
+VTFCMD_PATH = find_vtfcmd()
+if not VTFCMD_PATH:
+    print("Error: VTFCmd.exe not found and could not be downloaded.")
+    print("Cannot proceed without VTF conversion tools.")
     sys.exit(1)
 
-try:
-    from PIL import Image
-except ImportError:
-    print("Error: Pillow library is required.")
-    print("Install it with: pip install Pillow")
-    sys.exit(1)
 
-
-def convert_vtf_to_png(vtf_path, output_path=None):
+def convert_vtf_to_png(vtf_path, output_dir=None):
     """
-    Convert a single VTF file to PNG.
+    Convert a single VTF file to PNG using VTFCmd.exe.
     
     Args:
         vtf_path: Path to the VTF file
-        output_path: Optional output path. If None, uses same directory with .png extension
+        output_dir: Output directory. If None, uses same directory as vtf_path
     
     Returns:
         True if successful, False otherwise
     """
     try:
-        # Parse VTF file
-        parser = Parser(vtf_path)
-        image = parser.get_image()
+        base_name = os.path.basename(vtf_path)
         
-        # Ensure RGBA format
-        image = image.convert("RGBA")
+        # Determine output directory
+        if output_dir is None:
+            output_dir = os.path.dirname(vtf_path) or '.'
         
-        # Determine output path
-        if output_path is None:
-            output_path = Path(vtf_path).with_suffix('.png')
+        # Use absolute paths
+        abs_vtf_path = os.path.abspath(vtf_path)
+        abs_output_dir = os.path.abspath(output_dir)
         
-        # Save as PNG
-        image.save(output_path, "PNG")
+        # Get VTFCmd.exe directory to ensure VTFLib.dll is accessible
+        vtfcmd_dir = os.path.dirname(VTFCMD_PATH)
+        vtflib_path = os.path.join(vtfcmd_dir, 'VTFLib.dll')
+        
+        if not os.path.exists(vtflib_path):
+            raise Exception(f"VTFLib.dll not found at: {vtflib_path}")
+        
+        # VTFCmd.exe command for VTF to PNG conversion
+        cmd = [
+            VTFCMD_PATH,
+            '-file', abs_vtf_path,
+            '-output', abs_output_dir,
+            '-exportformat', 'png'
+        ]
+        
+        # Run VTFCmd.exe from its own directory to ensure DLL loading works
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=vtfcmd_dir,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
+        
+        if result.returncode != 0:
+            print(f"  Error: VTFCmd.exe failed with return code {result.returncode}")
+            if result.stderr:
+                print(f"  {result.stderr}")
+            return False
+        
         return True
         
     except Exception as e:
