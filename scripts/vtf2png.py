@@ -17,7 +17,18 @@ from pathlib import Path
 def find_vtfcmd():
     """Find VTFCmd.exe in various locations, download if not found"""
     
-    # Check 1: Bundled VTF tools first (preferred)
+    # Check 1: .CS2KZ-mapping-tools/vtf folder in Temp (preferred - shared location)
+    temp_dir = os.environ.get('TEMP', os.environ.get('TMP', tempfile.gettempdir()))
+    if temp_dir:
+        tools_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'vtf')
+        vtfcmd_path = os.path.join(tools_dir, 'VTFCmd.exe')
+        vtflib_path = os.path.join(tools_dir, 'VTFLib.dll')
+        
+        if os.path.exists(vtfcmd_path) and os.path.exists(vtflib_path):
+            print(f"[OK] Using VTF tools from: {vtfcmd_path}")
+            return vtfcmd_path
+    
+    # Check 2: Bundled VTF tools (fallback)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     bundled_vtfcmd = os.path.join(project_root, 'vtf', 'VTFCmd.exe')
@@ -27,17 +38,6 @@ def find_vtfcmd():
         if os.path.exists(bundled_vtflib):
             print(f"[OK] Using bundled VTF tools from: {bundled_vtfcmd}")
             return bundled_vtfcmd
-    
-    # Check 2: .CS2KZ-mapping-tools/vtf folder in Temp
-    temp_dir = os.environ.get('TEMP', os.environ.get('TMP', tempfile.gettempdir()))
-    if temp_dir:
-        tools_dir = os.path.join(temp_dir, '.CS2KZ-mapping-tools', 'vtf')
-        vtfcmd_path = os.path.join(tools_dir, 'VTFCmd.exe')
-        vtflib_path = os.path.join(tools_dir, 'VTFLib.dll')
-        
-        if os.path.exists(vtfcmd_path) and os.path.exists(vtflib_path):
-            print(f"[OK] Using cached VTF tools from: {vtfcmd_path}")
-            return vtfcmd_path
     
     # Download VTF tools if not found anywhere
     if not temp_dir:
