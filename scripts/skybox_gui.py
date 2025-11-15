@@ -103,8 +103,12 @@ class SkyboxConverterApp:
         self.check_vtf_tools()
     
     def log(self, message):
-        """Log message to console"""
-        print(message)
+        """Log message to console with proper encoding handling"""
+        try:
+            print(message)
+        except UnicodeEncodeError:
+            # Fallback to ASCII if console doesn't support Unicode
+            print(message.encode('ascii', errors='replace').decode('ascii'))
     
     def auto_detect_cs2(self):
         """Auto-detect CS2 installation path using common.py and get addon list"""
@@ -320,7 +324,7 @@ class SkyboxConverterApp:
                     self.log(f"Error: {line}")
             
             if result.returncode == 0:
-                self.log("✓ Skybox conversion completed successfully!")
+                self.log("[OK] Skybox conversion completed successfully!")
                 
                 # Copy generated files from temp directory to final output location
                 skybox_temp_dir = os.path.join(temp_dir, "skybox")
@@ -333,7 +337,7 @@ class SkyboxConverterApp:
                     if os.path.exists(temp_skybox_path):
                         os.makedirs(output_dir, exist_ok=True)
                         shutil.copy(temp_skybox_path, final_skybox_path)
-                        self.log(f"✓ Copied skybox to: {final_skybox_path}")
+                        self.log(f"[OK] Copied skybox to: {final_skybox_path}")
                     
                     # Copy VMAT files if created
                     for vmat_file in os.listdir(skybox_temp_dir):
@@ -341,7 +345,7 @@ class SkyboxConverterApp:
                             temp_vmat_path = os.path.join(skybox_temp_dir, vmat_file)
                             final_vmat_path = os.path.join(output_dir, vmat_file)
                             shutil.copy(temp_vmat_path, final_vmat_path)
-                            self.log(f"✓ Copied VMAT to: {final_vmat_path}")
+                            self.log(f"[OK] Copied VMAT to: {final_vmat_path}")
                 
                 self.status_message = "Conversion completed successfully!"
                 self.status_color = (0.0, 1.0, 0.0, 1.0)

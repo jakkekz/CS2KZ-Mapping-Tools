@@ -183,10 +183,10 @@ def convert_files(vtf_files, output_dir=None):
         
         if success:
             converted += 1
-            results.append(f"✓ {filename} -> {os.path.basename(message)}")
+            results.append(f"[OK] {filename} -> {os.path.basename(message)}")
         else:
             failed += 1
-            results.append(f"✗ {filename}: {message}")
+            results.append(f"[FAIL] {filename}: {message}")
     
     return converted, failed, results, actual_output_dir
 
