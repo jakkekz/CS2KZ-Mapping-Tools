@@ -9,6 +9,7 @@ glfw>=2.7.0
 # Image Processing
 Pillow>=10.0.0
 numpy>=1.24.0
+openexr-numpy>=0.1.0
 
 # Process Management
 psutil>=5.9.0

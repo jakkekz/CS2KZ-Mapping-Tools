@@ -189,6 +189,7 @@ jobs:
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=numpy `
+            --hidden-import=openexr_numpy `
             --hidden-import=vdf `
             --add-data="scripts;scripts" `
             --add-data="utils;utils" `
