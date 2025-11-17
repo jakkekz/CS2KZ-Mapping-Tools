@@ -92,18 +92,15 @@ def find_vtfcmd():
             print(f"Archive contents: {zf.namelist()}")
             
             for file_info in zf.namelist():
-                # Extract each required file (prefer x64 version, fallback to any)
+                # Extract each required file (prefer x64 version)
                 for filename, output_path in required_files.items():
                     if filename in file_info and filename not in found_files:
-                        # Skip x86/Win32 versions if we haven't found x64 yet
-                        if 'x86' in file_info.lower() or 'win32' in file_info.lower():
-                            continue
-                        
-                        with open(output_path, 'wb') as f:
-                            f.write(zf.read(file_info))
-                        found_files.add(filename)
-                        print(f"[OK] Extracted {filename} from: {file_info}")
-                        break
+                        if 'x64' in file_info:  # Prefer x64 version
+                            with open(output_path, 'wb') as f:
+                                f.write(zf.read(file_info))
+                            found_files.add(filename)
+                            print(f"[OK] Extracted {filename} from: {file_info}")
+                            break
                 
                 # Stop if all required files are found
                 if len(found_files) >= len(required_files):
