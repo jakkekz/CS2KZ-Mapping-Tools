@@ -12,8 +12,12 @@ import ctypes
 from pathlib import Path
 from PIL import Image, ImageTk
 
-# Import the creator functions
-from creator import (
+# Add the scripts directory to the path for imports
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+
+# Import the loading screen functions
+from loading_screen import (
     get_cs2_path,
     create_vmat_content,
     compile_vmat_files,
@@ -601,7 +605,7 @@ class LoadingScreenCreatorGUI:
             # Process images
             if self.image_files:
                 for i, source_image_path in enumerate(self.image_files, 1):
-                    dest_image_name = f"{map_name}_{i}_png.png"
+                    dest_image_name = f"{map_name}_{i}.png"
                     dest_image_path = os.path.join(loading_screen_dir, dest_image_name)
                     
                     # Crop to 16:9 and save

@@ -2257,7 +2257,7 @@ class ImGuiApp:
                         "CS2Importer.exe": "scripts/porting/cs2importer.py",
                         "SkyboxConverter.exe": "scripts/skybox_gui.py",
                         "VTF2PNG.exe": "scripts/vtf2png_gui.py",
-                        "LoadingScreenCreator.exe": "scripts/creator_gui.py",
+                        "LoadingScreenCreator.exe": "scripts/loading_screen_gui.py",
                         "PointWorldText.exe": "scripts/pointworldtext.py",
                         "Sounds.exe": "scripts/sounds.py"
                     }

@@ -3,6 +3,7 @@ import shutil
 import sys
 import subprocess
 import time
+import re
 from PIL import Image
 import winreg
 import vdf
@@ -100,28 +101,37 @@ def handle_compiled_files(game_root, map_name, addon_name):
             print(f"Processing: {file_name}")
             
             # Remove the hash part added by the compiler
-            # e.g., kz_avalon_5_png_png_7be1bfec.vtex_c -> kz_avalon_5_png.vtex_c
+            # e.g., kz_ashen_1_png_8363d5cd.vtex_c -> kz_ashen_1_png.vtex_c
             if '_png_' in file_name:
-                # Split on the last occurrence of '_png_' to remove the hash
-                parts = file_name.rsplit('_png_', 1)
-                if len(parts) > 1:
-                    # Get the extension (.vmat_c or .vtex_c)
-                    ext = os.path.splitext(file_name)[1]
-                    new_name = parts[0] + ext
-                    print(f"Renaming to: {new_name}")
-                    new_file_path = os.path.join(compiled_screenshots_dir, new_name)
-                    
-                    # Check if the destination file exists and remove it before renaming
-                    if os.path.exists(new_file_path):
-                        os.remove(new_file_path)
-                        print(f"Overwrote existing file: {new_name}")
-                    
-                    os.rename(file_path, new_file_path)
-                    print(f"Successfully renamed {file_name} to {new_name}")
+                if file_name.endswith('.vtex_c'):
+                    # For vtex files, look for pattern: mapname_X_png_hash.vtex_c -> mapname_X_png.vtex_c
+                    match = re.match(r'(.+_\d+_png)_[a-f0-9]+\.vtex_c$', file_name)
+                    if match:
+                        new_name = match.group(1) + '.vtex_c'
+                        print(f"Renaming to: {new_name}")
+                        new_file_path = os.path.join(compiled_screenshots_dir, new_name)
+                        
+                        # Check if the destination file exists and remove it before renaming
+                        if os.path.exists(new_file_path):
+                            os.remove(new_file_path)
+                            print(f"Overwrote existing file: {new_name}")
+                        
+                        os.rename(file_path, new_file_path)
+                        print(f"Successfully renamed {file_name} to {new_name}")
+                    else:
+                        print(f"Warning: Could not parse vtex filename: {file_name}")
+                elif file_name.endswith('.vmat_c'):
+                    # For vmat files: mapname_X_png.vmat_c (should already be correct)
+                    match = re.match(r'(.+_\d+_png)\.vmat_c$', file_name)
+                    if match:
+                        new_name = file_name  # Keep as is for .vmat_c files
+                        print(f"Keeping vmat_c file as: {new_name}")
+                    else:
+                        print(f"Warning: Could not parse vmat_c filename: {file_name}")
                 else:
-                    print(f"Warning: Could not split filename properly: {file_name}")
+                    print(f"Warning: Unknown file extension: {file_name}")
             else:
-                print(f"Warning: '_png_' not found in filename: {file_name}")
+                print(f"Warning: '_png_' pattern not found in filename: {file_name}")
 
     # Handle compiled SVG file (.vsvg_c)
     if os.path.exists(compiled_icons_dir):
@@ -247,7 +257,7 @@ Layer0
     g_flAlphaBlend "0.000"
 
     //---- Options ----
-    TextureA "panorama/images/map_icons/screenshots/1080p/{map_name}_{index}_png.png"
+    TextureA "panorama/images/map_icons/screenshots/1080p/{map_name}_{index}.png"
     TextureB ""
 
 
@@ -304,7 +314,7 @@ def create_map_files():
     image_files = sorted([f for f in files_to_process if f.lower().endswith(image_extensions)])
     
     for i, source_image_name in enumerate(image_files, 1):
-        dest_image_name = f"{map_name}_{i}_png.png"
+        dest_image_name = f"{map_name}_{i}.png"
         dest_image_path = os.path.join(loading_screen_dir, dest_image_name)
 
         try:
