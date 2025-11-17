@@ -2,6 +2,7 @@ import os
 import shutil
 import sys
 import subprocess
+import time
 from PIL import Image
 import winreg
 import vdf
@@ -140,26 +141,8 @@ def handle_compiled_files(game_root, map_name, addon_name):
                 os.rename(file_path, new_file_path)
                 print(f"Renamed {file_name} to {new_name}")
 
-    # Remove the original .vmat and .vmat_c files
-    print("\nCleaning up temporary files...")
-    
-    # Remove screenshot .vmat files from content folder
-    vmat_files_to_remove = glob.glob(os.path.join(content_addons_dir, 'panorama', 'images', 'map_icons', 'screenshots', '1080p', f"{map_name}_*_png.vmat"))
-    for file in vmat_files_to_remove:
-        try:
-            os.remove(file)
-            print(f"Removed {os.path.basename(file)} from content path.")
-        except OSError as e:
-            print(f"Error removing file {file}: {e}")
-
-    # Remove screenshot .vmat_c files from game folder
-    vmatc_files_to_remove = glob.glob(os.path.join(compiled_screenshots_dir, f"{map_name}_*_png.vmat_c"))
-    for file in vmatc_files_to_remove:
-        try:
-            os.remove(file)
-            print(f"Removed {os.path.basename(file)} from game path.")
-        except OSError as e:
-            print(f"Error removing file {file}: {e}")
+    # Note: Keeping .vmat and .vmat_c files as they are needed
+    print("\nKeeping compiled files (.vmat and .vmat_c) as they are required.")
 
 def compile_vmat_files(game_root, vmat_files, map_name, addon_name=None):
     """
