@@ -217,7 +217,7 @@ jobs:
             --hidden-import=PIL.ImageTk `
             --hidden-import=PIL.ImageDraw `
             --hidden-import=PIL.ImageFont `
-            scripts/creator_gui.py
+            scripts/loading_screen_gui.py
           
           # Build PointWorldText (onedir for faster startup, with console for debugging)
           pyinstaller --onedir `
@@ -291,8 +291,8 @@ jobs:
             --hidden-import=requests `
             --hidden-import=numpy `
             --hidden-import=vpk `
-            --hidden-import=scripts.creator `
-            --hidden-import=scripts.SkyboxConverter `
+            --hidden-import=scripts.loading_screen
+            --hidden-import=scripts.SkyboxConverter
             main.py
             
           # Rename console version
