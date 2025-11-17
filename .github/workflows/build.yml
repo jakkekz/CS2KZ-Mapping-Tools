@@ -291,8 +291,8 @@ jobs:
             --hidden-import=requests `
             --hidden-import=numpy `
             --hidden-import=vpk `
-            --hidden-import=scripts.loading_screen
-            --hidden-import=scripts.SkyboxConverter
+            --hidden-import=scripts.loading_screen `
+            --hidden-import=scripts.SkyboxConverter `
             main.py
             
           # Rename console version
@@ -323,7 +323,7 @@ jobs:
             --hidden-import=requests `
             --hidden-import=numpy `
             --hidden-import=vpk `
-            --hidden-import=scripts.creator `
+            --hidden-import=scripts.loading_screen `
             --hidden-import=scripts.SkyboxConverter `
             main.py
         
