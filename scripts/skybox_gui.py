@@ -75,7 +75,7 @@ class SkyboxConverterApp:
         self.show_done_popup = False
         
         # Window dimensions
-        self.base_window_height = 620
+        self.base_window_height = 570
           # Optimized for compact checkbox layout
         self.window_padding = 20
         
@@ -599,7 +599,7 @@ class SkyboxConverterApp:
         # Title text
         theme = self.theme_manager.get_theme()
         imgui.push_style_color(imgui.COLOR_TEXT, *theme["text"])
-        imgui.text("S1->S2 Skybox Converter")
+        imgui.text("Skybox Converter")
         imgui.pop_style_color()
         
         # Position close button on the right
@@ -723,7 +723,12 @@ class SkyboxConverterApp:
             if imgui.button("CONVERT SKYBOX", width=0, height=40):
                 self.start_conversion()
         else:
-            imgui.text("Converting...")
+            # Show a disabled button during conversion instead of text
+            imgui.push_style_color(imgui.COLOR_BUTTON, 0.3, 0.3, 0.3, 1.0)
+            imgui.push_style_color(imgui.COLOR_BUTTON_HOVERED, 0.3, 0.3, 0.3, 1.0)
+            imgui.push_style_color(imgui.COLOR_BUTTON_ACTIVE, 0.3, 0.3, 0.3, 1.0)
+            imgui.button("CONVERT SKYBOX", width=0, height=40)
+            imgui.pop_style_color(3)
             self.progress_spinner += 0.1
         
         # Status message
