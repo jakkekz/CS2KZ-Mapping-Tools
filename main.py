@@ -211,19 +211,26 @@ class ImGuiApp:
     def check_for_updates(self):
         """Check for application updates from GitHub Actions"""
         try:
+            # Auto-update temporarily disabled for onedir builds
+            # Users should manually download new versions from GitHub Releases
+            self.update_available = False
             # Check if update checker is available and check for updates
-            if self.update_checker:
-                self.update_available = self.update_checker.check_for_updates()
+            # if self.update_checker:
+            #     self.update_available = self.update_checker.check_for_updates()
         except Exception as e:
             print(f"Error checking for updates: {e}")
     
     def perform_update(self):
         """Download and install the latest update"""
         try:
-            if self.update_checker and self.update_available:
-                success = self.update_checker.download_and_install_update()
-                if success:
-                    self.update_checker.restart_application()
+            # Auto-update temporarily disabled for onedir builds
+            # Open GitHub releases page for manual download
+            import webbrowser
+            webbrowser.open("https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases/latest")
+            # if self.update_checker and self.update_available:
+            #     success = self.update_checker.download_and_install_update()
+            #     if success:
+            #         self.update_checker.restart_application()
         except Exception as e:
             print(f"Error performing update: {e}")
     
@@ -1994,10 +2001,13 @@ class ImGuiApp:
                             imgui.text(current_date_str)
                             imgui.text(current_time_str)
                         imgui.text("")
-                        imgui.text("Click to download")
-                        imgui.text("and install")
+                        imgui.text("Click to open")
+                        imgui.text("GitHub Releases")
                     else:
-                        imgui.text("No update available")
+                        imgui.text("Check for updates")
+                        imgui.text("")
+                        imgui.text("Click to open")
+                        imgui.text("GitHub Releases")
                         if self.update_checker and self.update_checker.current_version_date:
                             imgui.text("")
                             current_date_str = self.update_checker.current_version_date.strftime("%Y-%m-%d")
@@ -2248,7 +2258,7 @@ class ImGuiApp:
             thread.start()
         
         def run_gui_executable(exe_name):
-            """Extract and run a bundled GUI executable folder (onedir format)"""
+            """Run a bundled GUI executable directly from gui_tools folder (onedir format)"""
             try:
                 # If running from source (not frozen), run Python scripts directly
                 if not getattr(sys, 'frozen', False):
@@ -2266,34 +2276,24 @@ class ImGuiApp:
                         subprocess.Popen([sys.executable, script_path])
                         return
                 
-                # Get the temp extraction folder
-                temp_base = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 
-                                         'Temp', '.CS2KZ-mapping-tools')
-                os.makedirs(temp_base, exist_ok=True)
-                
-                # Remove .exe extension to get folder name
+                # With onedir main exe, GUI tools are directly in gui_tools folder
+                # No extraction needed - just run them directly!
                 folder_name = exe_name.replace('.exe', '')
-                extracted_folder = os.path.join(temp_base, folder_name)
-                extracted_exe_path = os.path.join(extracted_folder, exe_name)
+                gui_tool_folder = resource_path(os.path.join('gui_tools', folder_name))
+                gui_tool_exe = os.path.join(gui_tool_folder, exe_name)
                 
-                # If already extracted, just run it
-                if os.path.exists(extracted_exe_path):
-                    subprocess.Popen([extracted_exe_path])
+                if not os.path.exists(gui_tool_exe):
+                    print(f"Error: {exe_name} not found at {gui_tool_exe}")
                     return
                 
-                # Extract from bundled resources (onedir structure)
-                bundled_folder = resource_path(os.path.join('gui_tools', folder_name))
-                
-                if os.path.exists(bundled_folder):
-                    # Copy entire folder to temp location
-                    import shutil
-                    shutil.copytree(bundled_folder, extracted_folder, dirs_exist_ok=True)
-                    print(f"Extracted {folder_name} to {extracted_folder}")
-                    
-                    # Run the extracted executable
-                    subprocess.Popen([extracted_exe_path])
-                else:
-                    print(f"Error: {folder_name} not found in bundled resources")
+                # Run the GUI tool directly from the main folder
+                try:
+                    subprocess.Popen([gui_tool_exe])
+                    print(f"Launched {gui_tool_exe}")
+                except Exception as launch_error:
+                    print(f"Error launching {exe_name}: {launch_error}")
+                    import traceback
+                    traceback.print_exc()
                     
             except Exception as e:
                 print(f"Error launching GUI executable {exe_name}: {e}")

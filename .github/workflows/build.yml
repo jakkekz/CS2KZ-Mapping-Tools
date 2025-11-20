@@ -264,11 +264,11 @@ jobs:
           Move-Item -Path dist/PointWorldText -Destination gui_tools/
           Move-Item -Path dist/Sounds -Destination gui_tools/
 
-      - name: Build CS2KZMappingTools.exe (One-File)
+      - name: Build CS2KZMappingTools.exe (One-Dir)
         run: |
           # Build console version (with command window)
-          pyinstaller --onefile `
-            --name=CS2KZMappingTools `
+          pyinstaller --onedir `
+            --name=CS2KZMappingTools-console `
             --icon=icons/hammerkz.ico `
             --add-data="icons;icons" `
             --add-data="scripts;scripts" `
@@ -294,12 +294,9 @@ jobs:
             --hidden-import=scripts.loading_screen `
             --hidden-import=scripts.SkyboxConverter `
             main.py
-            
-          # Rename console version
-          Move-Item -Path "dist/CS2KZMappingTools.exe" -Destination "dist/CS2KZMappingTools-console.exe"
           
           # Build windowed version (no command window)
-          pyinstaller --onefile --noconsole `
+          pyinstaller --onedir --noconsole `
             --name=CS2KZMappingTools `
             --icon=icons/hammerkz.ico `
             --add-data="icons;icons" `
@@ -327,13 +324,19 @@ jobs:
             --hidden-import=scripts.SkyboxConverter `
             main.py
         
-      - name: Upload artifact (Single EXE)
+      - name: Package builds as ZIP files
+        run: |
+          # Create ZIP files for distribution
+          Compress-Archive -Path "dist/CS2KZMappingTools-console/*" -DestinationPath "dist/CS2KZMappingTools-console.zip"
+          Compress-Archive -Path "dist/CS2KZMappingTools/*" -DestinationPath "dist/CS2KZMappingTools.zip"
+          
+      - name: Upload artifact (ZIP packages)
         uses: actions/upload-artifact@v4
         with:
-          name: cs2kz-mapping-tools-exe
+          name: cs2kz-mapping-tools-zip
           path: |
-            dist/CS2KZMappingTools.exe
-            dist/CS2KZMappingTools-console.exe
+            dist/CS2KZMappingTools.zip
+            dist/CS2KZMappingTools-console.zip
 
   release:
     needs: build
@@ -347,7 +350,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: cs2kz-mapping-tools-exe
+          name: cs2kz-mapping-tools-zip
           path: ./artifacts
 
       - name: Create Tag
@@ -379,8 +382,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ./artifacts/CS2KZMappingTools.exe
-            ./artifacts/CS2KZMappingTools-console.exe
+            ./artifacts/CS2KZMappingTools.zip
+            ./artifacts/CS2KZMappingTools-console.zip
           tag_name: ${{ env.TAG_NAME }}
           name: CS2KZ Mapping Tools - ${{ env.TAG_NAME }}
         env:
