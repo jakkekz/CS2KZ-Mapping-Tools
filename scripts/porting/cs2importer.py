@@ -1,6 +1,6 @@
 """
 CS2 Map Importer - PyImGui Interface
-Automatically detects CS2 path, modifies required files, and restores them after porting
+Automatically detects CS2 path, modifies required files, and restores them after porting!
 """
 
 import imgui
