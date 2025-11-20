@@ -203,18 +203,28 @@ class UpdateChecker:
                 print("[Update] Running as script - update only works for compiled executable")
                 return False
             
-            # Find the extracted folder (it should be the only folder in extract_dir)
-            extracted_folders = [f for f in os.listdir(extract_dir) if os.path.isdir(os.path.join(extract_dir, f))]
-            if not extracted_folders:
-                print("[Update] ERROR: No folder found in extracted ZIP")
-                return False
+            # The ZIP extracts directly to extract_dir (no subfolder)
+            # Check if exe is directly in extract_dir
+            new_exe_path = os.path.join(extract_dir, os.path.basename(current_exe))
             
-            new_version_folder = os.path.join(extract_dir, extracted_folders[0])
-            new_exe_path = os.path.join(new_version_folder, os.path.basename(current_exe))
-            
-            if not os.path.exists(new_exe_path):
-                print(f"[Update] ERROR: New executable not found at {new_exe_path}")
-                return False
+            if os.path.exists(new_exe_path):
+                # Exe found directly in extract_dir
+                new_version_folder = extract_dir
+            else:
+                # Maybe there's a subfolder? Check for it
+                extracted_folders = [f for f in os.listdir(extract_dir) if os.path.isdir(os.path.join(extract_dir, f))]
+                if not extracted_folders:
+                    print(f"[Update] ERROR: New executable not found at {new_exe_path}")
+                    print(f"[Update] Contents of extract_dir: {os.listdir(extract_dir)}")
+                    return False
+                
+                new_version_folder = os.path.join(extract_dir, extracted_folders[0])
+                new_exe_path = os.path.join(new_version_folder, os.path.basename(current_exe))
+                
+                if not os.path.exists(new_exe_path):
+                    print(f"[Update] ERROR: New executable not found at {new_exe_path}")
+                    print(f"[Update] Contents of new_version_folder: {os.listdir(new_version_folder)}")
+                    return False
             
             print(f"[Update] New version folder: {new_version_folder}")
             print(f"[Update] New executable: {new_exe_path}")
