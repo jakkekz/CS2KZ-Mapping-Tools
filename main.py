@@ -223,14 +223,14 @@ class ImGuiApp:
     def perform_update(self):
         """Download and install the latest update"""
         try:
-            # Auto-update temporarily disabled for onedir builds
-            # Open GitHub releases page for manual download
-            import webbrowser
-            webbrowser.open("https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases/latest")
-            # if self.update_checker and self.update_available:
-            #     success = self.update_checker.download_and_install_update()
-            #     if success:
-            #         self.update_checker.restart_application()
+            if self.update_checker and self.update_available:
+                success = self.update_checker.download_and_install_update()
+                if success:
+                    self.update_checker.restart_application()
+            else:
+                # No update available, open GitHub releases page
+                import webbrowser
+                webbrowser.open("https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases/latest")
         except Exception as e:
             print(f"Error performing update: {e}")
     

@@ -118,7 +118,8 @@ class UpdateChecker:
                     for asset in assets:
                         name = asset.get('name', '')
                         print(f"[Update] Asset: {name}")
-                        if name.endswith('.exe') and 'CS2KZ' in name and 'MappingTools' in name:
+                        # Look for ZIP files instead of EXE (new onedir format)
+                        if name.endswith('.zip') and 'CS2KZ' in name and 'MappingTools' in name:
                             # Check if this matches the current version type
                             is_console_asset = 'console' in name.lower()
                             
@@ -149,13 +150,15 @@ class UpdateChecker:
         return False
     
     def download_and_install_update(self):
-        """Download the latest version and replace the current executable"""
+        """Download the latest version ZIP and prepare for extraction"""
         if not self.update_available or not self.latest_download_url:
             print("[Update] No update available or no download URL")
             return False
         
         try:
+            import zipfile
             print(f"[Update] Starting update process...")
+            
             # Get temp directory
             temp_dir = os.path.join(tempfile.gettempdir(), ".cs2kz-mapping-tools")
             update_dir = os.path.join(temp_dir, "update")
@@ -164,69 +167,126 @@ class UpdateChecker:
             os.makedirs(update_dir, exist_ok=True)
             print(f"[Update] Update directory: {update_dir}")
             
-            # Download the new executable
-            new_exe_path = os.path.join(update_dir, "CS2KZ-Mapping-Tools-new.exe")
+            # Download the new ZIP
+            zip_path = os.path.join(update_dir, "CS2KZ-Mapping-Tools-new.zip")
             
             print(f"[Update] Downloading from {self.latest_download_url}...")
-            urllib.request.urlretrieve(self.latest_download_url, new_exe_path)
-            print(f"[Update] Downloaded to {new_exe_path}")
+            urllib.request.urlretrieve(self.latest_download_url, zip_path)
+            print(f"[Update] Downloaded to {zip_path}")
             
-            if not os.path.exists(new_exe_path):
+            if not os.path.exists(zip_path):
                 print("[Update] Failed to download update - file doesn't exist")
                 return False
             
-            file_size = os.path.getsize(new_exe_path)
+            file_size = os.path.getsize(zip_path)
             print(f"[Update] Downloaded file size: {file_size} bytes")
             
-            # Clear temp folder (except settings and Source2Viewer)
-            print("[Update] Clearing temp folder...")
-            self._clear_temp_folder(temp_dir)
+            # Extract ZIP to temp location
+            extract_dir = os.path.join(update_dir, "extracted")
+            if os.path.exists(extract_dir):
+                import shutil
+                shutil.rmtree(extract_dir)
             
-            # Get current executable path
+            print(f"[Update] Extracting ZIP...")
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            print(f"[Update] Extracted to {extract_dir}")
+            
+            # Get current installation directory (parent of _internal)
             if hasattr(sys, '_MEIPASS'):
                 current_exe = sys.executable
+                install_dir = os.path.dirname(current_exe)
                 print(f"[Update] Current executable: {current_exe}")
+                print(f"[Update] Installation directory: {install_dir}")
             else:
                 # Running as script - can't update
                 print("[Update] Running as script - update only works for compiled executable")
                 return False
             
-            # Create a batch script to replace the executable
+            # Find the extracted folder (it should be the only folder in extract_dir)
+            extracted_folders = [f for f in os.listdir(extract_dir) if os.path.isdir(os.path.join(extract_dir, f))]
+            if not extracted_folders:
+                print("[Update] ERROR: No folder found in extracted ZIP")
+                return False
+            
+            new_version_folder = os.path.join(extract_dir, extracted_folders[0])
+            new_exe_path = os.path.join(new_version_folder, os.path.basename(current_exe))
+            
+            if not os.path.exists(new_exe_path):
+                print(f"[Update] ERROR: New executable not found at {new_exe_path}")
+                return False
+            
+            print(f"[Update] New version folder: {new_version_folder}")
+            print(f"[Update] New executable: {new_exe_path}")
+            
+            # Create a batch script to replace the folder
             batch_script = os.path.join(update_dir, "update.bat")
             print(f"[Update] Creating batch script: {batch_script}")
             with open(batch_script, 'w') as f:
                 f.write('@echo off\n')
+                f.write('echo CS2KZ Mapping Tools Updater\n')
+                f.write('echo =============================\n')
+                f.write('echo.\n')
                 f.write('echo Waiting for application to close...\n')
-                f.write('timeout /t 5 /nobreak > nul\n')  # Wait longer for main app to close
-                f.write(f'echo Replacing executable...\n')
-                # Try to delete the old exe first (in case move fails)
-                f.write(f'del /f /q "{current_exe}" 2>nul\n')
-                f.write(f'move /y "{new_exe_path}" "{current_exe}"\n')
-                f.write(f'if errorlevel 1 (\n')
-                f.write(f'    echo Failed to replace executable\n')
-                f.write(f'    echo Error: %%errorlevel%%\n')
-                f.write(f'    pause\n')
-                f.write(f'    exit /b 1\n')
+                f.write('timeout /t 3 /nobreak > nul\n')
+                f.write('echo.\n')
+                f.write('echo Updating application...\n')
+                f.write('echo.\n')
+                
+                # Save settings.json if it exists
+                settings_backup = os.path.join(update_dir, 'settings_backup.json')
+                settings_file = os.path.join(install_dir, 'settings.json')
+                f.write(f'if exist "{settings_file}" (\n')
+                f.write(f'    echo Backing up settings...\n')
+                f.write(f'    copy /y "{settings_file}" "{settings_backup}" > nul\n')
                 f.write(f')\n')
-                f.write(f'echo Update successful!\n')
-                f.write(f'echo Starting updated application: {current_exe}\n')
-                f.write(f'echo.\n')
-                # Use full path and proper quoting for start command
-                f.write(f'cd /d "{os.path.dirname(current_exe)}"\n')
+                f.write('echo.\n')
+                
+                # Delete old installation (except a few files)
+                f.write(f'echo Removing old version...\n')
+                f.write(f'cd /d "{install_dir}"\n')
+                f.write(f'for %%F in (*) do (\n')
+                f.write(f'    if not "%%F"=="settings.json" (\n')
+                f.write(f'        del /f /q "%%F" 2>nul\n')
+                f.write(f'    )\n')
+                f.write(f')\n')
+                f.write(f'for /d %%D in (*) do (\n')
+                f.write(f'    rd /s /q "%%D" 2>nul\n')
+                f.write(f')\n')
+                f.write('echo.\n')
+                
+                # Copy new version
+                f.write(f'echo Installing new version...\n')
+                f.write(f'xcopy "{new_version_folder}\\*" "{install_dir}\\" /s /e /y /i > nul\n')
+                f.write('if errorlevel 1 (\n')
+                f.write('    echo ERROR: Failed to copy new version!\n')
+                f.write('    pause\n')
+                f.write('    exit /b 1\n')
+                f.write(')\n')
+                f.write('echo.\n')
+                
+                # Restore settings.json
+                f.write(f'if exist "{settings_backup}" (\n')
+                f.write(f'    echo Restoring settings...\n')
+                f.write(f'    copy /y "{settings_backup}" "{settings_file}" > nul\n')
+                f.write(f'    del /f /q "{settings_backup}" > nul\n')
+                f.write(f')\n')
+                f.write('echo.\n')
+                
+                # Start new version
+                f.write('echo Update complete! Starting application...\n')
+                f.write(f'cd /d "{install_dir}"\n')
                 f.write(f'start "" "{os.path.basename(current_exe)}"\n')
-                f.write(f'if errorlevel 1 (\n')
-                f.write(f'    echo Failed to start application\n')
-                f.write(f'    echo Trying alternate method...\n')
-                f.write(f'    "{current_exe}"\n')
-                f.write(f')\n')
-                f.write(f'timeout /t 2 /nobreak > nul\n')  # Brief delay before cleanup
-                f.write(f'del "%~f0"\n')  # Delete the batch script itself
+                f.write('echo.\n')
+                f.write('timeout /t 2 /nobreak > nul\n')
+                
+                # Cleanup
+                f.write(f'rd /s /q "{update_dir}" 2>nul\n')
+                f.write('del "%~f0"\n')
             
             print("[Update] Launching update script and exiting...")
-            print(f"[Update] Batch script will replace: {current_exe}")
-            print(f"[Update] With new file: {new_exe_path}")
-            # Run the batch script with visible window for debugging
-            subprocess.Popen(['cmd', '/c', batch_script])
+            # Run the batch script
+            subprocess.Popen(['cmd', '/c', batch_script], creationflags=subprocess.CREATE_NEW_CONSOLE)
             
             # Force immediate exit
             print("[Update] Exiting application for update...")
