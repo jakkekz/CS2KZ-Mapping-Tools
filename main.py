@@ -211,12 +211,9 @@ class ImGuiApp:
     def check_for_updates(self):
         """Check for application updates from GitHub Actions"""
         try:
-            # Auto-update temporarily disabled for onedir builds
-            # Users should manually download new versions from GitHub Releases
-            self.update_available = False
             # Check if update checker is available and check for updates
-            # if self.update_checker:
-            #     self.update_available = self.update_checker.check_for_updates()
+            if self.update_checker:
+                self.update_available = self.update_checker.check_for_updates()
         except Exception as e:
             print(f"Error checking for updates: {e}")
     
