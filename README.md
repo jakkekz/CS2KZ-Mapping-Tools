@@ -2,104 +2,57 @@
 
 # CS2KZ Mapping Tools
 
-A comprehensive suite of tools for Counter-Strike 2 KZ (Kreedz) map creation and development. Built with Python and ImGui for a clean, intuitive interface.
-
-Polished, beautifully crafted ✨ through relentless, high-volume iteration and trial-and-error 💥. The underlying code often reflects this rapid process, utilizing dense, unconventional, yet highly functional logic 🧠 reminiscent of machine-generated efficiency 🤖.
+Suite of tools for Counter-Strike 2 KZ map creation and development. Built with Python and ImGui by Claude and jakke.
 
 
-## 🎯 Features
+## Features
 
 ### Core Tools
 
-- **🗺️ Mapping Mode**  
-  Launch CS2 Hammer Editor with the latest Metamod, CS2KZ plugin, and Mapping API versions pre-configured
+- **Mapping Mode** - Launch Hammer Editor with latest Metamod, CS2KZ plugin, and Mapping API
+- **Listen Server** - Start CS2 with Metamod and CS2KZ for map testing
+- **Dedicated Server** - Launch CS2 dedicated server with automatic setup
+- **Insecure Mode** - Launch CS2 in insecure mode
+- **Source2Viewer** - View Source 2 assets (auto-updates to latest dev build)
+- **CS2 Map Importer** - Port CS:GO maps to CS2 (automated BSP extraction, material/model porting, bundled Python)
+- **Skybox Converter** - Convert Source 1 skyboxes to Source 2 format
+- **Loading Screen Creator** - Add custom loading screens and map descriptions
+- **Point Worldtext Generator** - Create point_worldtext PNG images
+- **VTF to PNG Converter** - Mass convert VTF textures to PNG
+- **Sound Manager** - Add custom sounds with loop point support (requires [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime) for VPK sounds)
 
-- **🎮 Listen Server**  
-  Start CS2 with the latest Metamod and CS2KZ plugin for testing your maps
+## Installation
 
-- **🖥️ Dedicated Server**  
-  Launch a CS2 Dedicated Server with automatic Metamod and CS2KZ setup
-
-- **🔓 Insecure Mode**  
-  Launch CS2 in insecure mode
-
-### Additional Tools
-
-- **👁️ Source2Viewer**  
-  View and inspect Source 2 assets with automatic updates to the latest dev build
-
-- **🔄 CS2 Map Importer**  
-  Port CS:GO maps to CS2 format with automated BSP extraction and asset conversion
-  - Automatic BSPSource integration for VMF extraction
-  - Material and model porting with progress tracking
-  - Real-time import progress with detailed logs
-  - "Open Log" and "Open Folder" buttons after successful import
-  - No Python installation required (bundled portable Python)
-  *Inspired by sarim-hk and andreaskeller96*
-
-- **🌅 Skybox Converter**  
-  Convert Source 1 cubemap skyboxes to CS2-compatible format
-
-- **🖼️ Loading Screen Creator**  
-  Add custom loading screen images, map icons, and descriptions to your maps
-
-- **📝 Point Worldtext Generator**  
-  Create CS:GO style point_worldtext PNG images
-
-- **🎨 VTF to PNG Converter**  
-  Convert CS:GO VTF texture files to PNG images
-
-- **🎵 Sound Manager**  
-  Add custom sounds to CS2 maps with loop point support
-  - Custom sound files (WAV/MP3) - works out of the box
-  - Internal CS2 sounds from VPK - requires [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime)
-  - MP3 to WAV conversion with ffmpeg (auto-downloads when needed)
-  - Loop point extraction and management
-  - Sound preview and playback
-  - Automatic sound file packaging
-
-## 🚀 Getting Started
-
-### Installation (Standalone Executable)
-
-1. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
-2. Run `CS2KZMappingTools.exe`
+1. Download the latest ZIP from [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases)
+2. Extract to a permanent location
+3. Run `CS2KZMappingTools-console.exe` or `CS2KZMappingTools.exe`
 
 ### Updating
 
-**Important: Close Counter-Strike 2 before updating!**
+Click the update icon in the app (top-right) to automatically download and install updates. The app will:
+- Download the new version
+- Backup your settings
+- Replace files in-place
+- Restart automatically
 
-1. Make sure CS2 is completely closed
-2. Download the latest `CS2KZMappingTools.exe` from the [Releases](https://github.com/jakkekz/CS2KZ-Mapping-Tools/releases) page
-3. Run `CS2KZMappingTools.exe`
-4. Open `Settings` -> `Clear Temp Folder`
-5. Ready to go again
+All shortcuts and settings are preserved.
 
-OR press the green download button in the top right of the window.
+## Configuration
 
-## ⚙️ Configuration
-
-The application automatically:
-- Downloads and installs the latest Metamod versions
-- Updates CS2KZ plugin to the latest release
-
-### Settings
-
-Access settings via the menu to customize:
+Settings menu allows customization of:
 - Button visibility and order
 - Auto-update preferences (Metamod, CS2KZ, Source2Viewer)
-- Window appearance (compact mode, opacity, always on top)
-- Theme (dark/light mode)
+- Window appearance (compact mode, opacity, always on top, theme)
 
-## 📦 Version Management
+## Version Management
 
-The tools automatically manage versions:
-- [**Metamod**](https://www.sourcemm.net/downloads.php?branch=master&all=1): Fetched from AlliedModders
-- [**CS2KZ Plugin**](https://github.com/KZGlobalTeam/cs2kz-metamod): Latest releases from GitHub
-- [**CS2KZ Mapping API**](https://github.com/KZGlobalTeam/cs2kz-metamod/wiki/Mapping-API): Latest releases from GitHub
-- [**Source2Viewer**](https://s2v.app/): Auto-updates via development builds
+Automatic version management:
+- [Metamod](https://www.sourcemm.net/downloads.php?branch=master&all=1) - Latest from AlliedModders
+- [CS2KZ Plugin](https://github.com/KZGlobalTeam/cs2kz-metamod) - Latest GitHub releases
+- [CS2KZ Mapping API](https://github.com/KZGlobalTeam/cs2kz-metamod/wiki/Mapping-API) - Latest releases
+- [Source2Viewer](https://s2v.app/) - Auto-updates to latest dev builds
 
-Version information is displayed in button tooltips.
+Version info shown in button tooltips.
 
 ## 🤝 Contributing
 
