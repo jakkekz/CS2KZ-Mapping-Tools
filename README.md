@@ -27,6 +27,8 @@ Suite of tools for Counter-Strike 2 KZ map creation and development. Built with 
 2. Extract to a permanent location
 3. Run `CS2KZMappingTools-console.exe` or `CS2KZMappingTools.exe`
 
+**(IF you want to run the .exe from somewhere else, make a shortcut and use that.)**
+
 ### Updating
 
 Click the update icon in the app (top-right) to automatically download and install updates. The app will:
