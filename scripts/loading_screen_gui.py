@@ -9,6 +9,7 @@ import os
 import sys
 import subprocess
 import ctypes
+import glob
 from pathlib import Path
 from PIL import Image, ImageTk
 
@@ -603,6 +604,16 @@ class LoadingScreenCreatorGUI:
             # Create destination directories
             for directory in [loading_screen_dir, map_icon_content_dir, maps_dir]:
                 os.makedirs(directory, exist_ok=True)
+            
+            # Clean up old compiled files for this map to prevent leftover hash-suffixed files
+            game_loading_screen_dir = os.path.join(game_addons_dir, 'panorama', 'images', 'map_icons', 'screenshots', '1080p')
+            if os.path.exists(game_loading_screen_dir):
+                old_files = glob.glob(os.path.join(game_loading_screen_dir, f"{map_name}_*.*"))
+                for old_file in old_files:
+                    try:
+                        os.remove(old_file)
+                    except Exception as e:
+                        print(f"Could not remove {old_file}: {e}")
             
             vmat_files_to_compile = []
             svg_files_to_compile = []
