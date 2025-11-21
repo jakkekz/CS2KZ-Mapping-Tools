@@ -366,7 +366,7 @@ class LoadingScreenCreatorGUI:
         loading_screen_link.pack(side=tk.LEFT)
         loading_screen_link.bind("<Button-1>", lambda e: self.open_loading_screen_example())
         
-        tk.Label(loading_title_frame, text=" (1-9, optional):", 
+        tk.Label(loading_title_frame, text=" (2-9 images, optional):", 
                 font=("Segoe UI", 10, "bold"),
                 bg=DARK_BG, fg=DARK_TEXT).pack(side=tk.LEFT)
         
@@ -519,6 +519,11 @@ class LoadingScreenCreatorGUI:
         if files:
             # Limit to 9 images
             files = list(files)[:9]
+            
+            # Duplicate single image to meet minimum of 2 images
+            if len(files) == 1:
+                files = files * 2
+            
             self.image_files = files
             
             # Update listbox
@@ -672,11 +677,16 @@ class LoadingScreenCreatorGUI:
             if svg_files_to_compile:
                 compile_svg_files(self.cs2_path, svg_files_to_compile, map_name, addon_name)
             
+            # Count unique images (in case of duplication)
+            unique_images = len(set(self.image_files))
+            total_images = len(self.image_files)
+            image_info = f"{total_images}" if unique_images == total_images else f"{total_images} (1 image duplicated)"
+            
             messagebox.showinfo(
                 "Success",
                 f"Loading screen files created successfully!\n\n"
                 f"Map Name: {map_name}\n"
-                f"Images: {len(self.image_files)}\n"
+                f"Images: {image_info}\n"
                 f"SVG Icon: {'Yes' if self.svg_file else 'No'}\n"
                 f"Description: {'Yes' if description_text else 'No'}\n\n"
                 f"Files have been compiled and placed in:\n"
