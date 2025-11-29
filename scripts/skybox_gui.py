@@ -20,7 +20,12 @@ from PIL import Image
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.theme_manager import ThemeManager
 from scripts.common import get_cs2_path
-from scripts.SkyboxConverter import find_vtfcmd
+from scripts.SkyboxConverter import (
+    find_vtfcmd,
+    stitch_cubemap_rotated,
+    create_vmat_files_conditionally,
+    clean_up_original_source_files
+)
 
 # Constants
 CUSTOM_TITLE_BAR_HEIGHT = 30
@@ -258,7 +263,9 @@ class SkyboxConverterApp:
     def run_conversion_thread(self):
         """Run skybox conversion in background thread"""
         try:
-            # This will call SkyboxConverter.py as a subprocess since it's a complete script
+            import shutil
+            
+            # This now calls the conversion functions directly instead of subprocess
             self.log("Starting skybox conversion...")
             
             # Determine output directory
@@ -282,88 +289,64 @@ class SkyboxConverterApp:
                 output_dir = self.output_dir
                 self.log(f"Output to directory: {output_dir}")
             
-            # Copy selected files to output directory temporarily
-            import shutil
-            temp_dir = tempfile.mkdtemp(prefix="skybox_files_")
+            # Create a mapping of face names to file paths
+            # The skybox files are expected in order: right, left, back, front, up, down
+            # Map them to the keys expected by stitch_cubemap_rotated
+            face_names = ['right', 'left', 'back', 'front', 'up', 'down']
+            file_map = {}
             
-            for i, file_path in enumerate(self.skybox_files):
-                dest_file = os.path.join(temp_dir, os.path.basename(file_path))
-                shutil.copy(file_path, dest_file)
-                self.log(f"Copied: {os.path.basename(file_path)}")
+            if len(self.skybox_files) == 6:
+                for i, face in enumerate(face_names):
+                    file_map[face] = self.skybox_files[i]
+                    self.log(f"Mapped {face}: {os.path.basename(self.skybox_files[i])}")
+            else:
+                self.log(f"Error: Expected 6 files, got {len(self.skybox_files)}")
+                raise ValueError("Invalid number of skybox files")
             
-            # Run SkyboxConverter.py
-            skybox_script = resource_path(os.path.join("scripts", "SkyboxConverter.py"))
+            # Prepare output paths
+            final_output_filename = f"{self.skybox_prefix}.png"
+            final_skybox_vmat_filename = f"skybox_{self.skybox_prefix}.vmat"
+            final_moondome_vmat_filename = f"moondome_{self.skybox_prefix}.vmat"
             
-            # Set environment variables to pass parameters
-            env = os.environ.copy()
-            env['SKYBOX_INPUT_DIR'] = temp_dir
-            env['SKYBOX_OUTPUT_DIR'] = output_dir
-            env['SKYBOX_PREFIX'] = self.skybox_prefix
-            env['CREATE_SKYBOX_VMAT'] = '1' if self.create_skybox_vmat else '0'
-            env['CREATE_MOONDOME_VMAT'] = '1' if self.create_moondome_vmat else '0'
-            env['CLEANUP_SOURCE_FILES'] = '1' if self.cleanup_source_files else '0'
+            final_output_path = os.path.join(output_dir, final_output_filename)
+            final_skybox_vmat_path = os.path.join(output_dir, final_skybox_vmat_filename)
+            final_moondome_vmat_path = os.path.join(output_dir, final_moondome_vmat_filename)
             
-            # Pass original file paths for cleanup (separated by |)
-            env['ORIGINAL_FILE_PATHS'] = '|'.join(self.skybox_files)
+            # Engine texture path for VMAT (always relative: materials/skybox/filename.png)
+            skytexture_path = f"materials/skybox/{final_output_filename}"
             
-            # Run as subprocess
-            result = subprocess.run(
-                [sys.executable, skybox_script],
-                cwd=temp_dir,
-                capture_output=True,
-                text=True,
-                env=env
-            )
+            # Call conversion function directly
+            self.log("Stitching cubemap faces...")
+            success = stitch_cubemap_rotated(file_map, final_output_path, output_dir)
             
-            # Log output
-            for line in result.stdout.splitlines():
-                self.log(line)
-            
-            if result.stderr:
-                for line in result.stderr.splitlines():
-                    self.log(f"Error: {line}")
-            
-            if result.returncode == 0:
+            if success:
+                self.log("[OK] Cubemap stitched successfully!")
+                
+                # Optional VMAT creation
+                if self.create_skybox_vmat or self.create_moondome_vmat:
+                    self.log("Creating VMAT files...")
+                    create_vmat_files_conditionally(
+                        final_skybox_vmat_path,
+                        final_moondome_vmat_path,
+                        skytexture_path,
+                        self.create_skybox_vmat,
+                        self.create_moondome_vmat
+                    )
+                    self.log("[OK] VMAT files created!")
+                
+                # Optional cleanup
+                if self.cleanup_source_files:
+                    self.log("Cleaning up source files...")
+                    clean_up_original_source_files(self.skybox_files)
+                    self.log("[OK] Source files cleaned up!")
+                
                 self.log("[OK] Skybox conversion completed successfully!")
-                
-                # Copy generated files from temp directory to final output location
-                skybox_temp_dir = os.path.join(temp_dir, "skybox")
-                if os.path.exists(skybox_temp_dir):
-                    # Copy skybox PNG
-                    skybox_png = f"{self.skybox_prefix}.png"
-                    temp_skybox_path = os.path.join(skybox_temp_dir, skybox_png)
-                    final_skybox_path = os.path.join(output_dir, skybox_png)
-                    
-                    if os.path.exists(temp_skybox_path):
-                        os.makedirs(output_dir, exist_ok=True)
-                        shutil.copy(temp_skybox_path, final_skybox_path)
-                        self.log(f"[OK] Copied skybox to: {final_skybox_path}")
-                    
-                    # Copy VMAT files if created
-                    for vmat_file in os.listdir(skybox_temp_dir):
-                        if vmat_file.endswith('.vmat'):
-                            temp_vmat_path = os.path.join(skybox_temp_dir, vmat_file)
-                            final_vmat_path = os.path.join(output_dir, vmat_file)
-                            shutil.copy(temp_vmat_path, final_vmat_path)
-                            self.log(f"[OK] Copied VMAT to: {final_vmat_path}")
-                
                 self.status_message = "Conversion completed successfully!"
                 self.status_color = (0.0, 1.0, 0.0, 1.0)
                 self.conversion_completed = True
+                self.show_done_popup = True
             else:
                 raise Exception("Skybox conversion failed")
-            
-            # Clean up temp directory
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            
-            # Clean up temp directory
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            
-            self.status_message = "Conversion completed successfully!"
-            self.status_color = (0.0, 1.0, 0.0, 1.0)
-            self.conversion_completed = True
-            self.show_done_popup = True
             
         except Exception as e:
             self.log(f"Error during conversion: {e}")
